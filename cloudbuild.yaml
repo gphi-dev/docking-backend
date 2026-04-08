@@ -7,7 +7,7 @@ substitutions:
   _REGION: asia-east1
   # Example: asia-east1-docker.pkg.dev/$PROJECT_ID/REPO/IMAGE:tag
   _AR_REPOSITORY: cloud-run-source-deploy
-  _CLOUDSQL_INSTANCES: utility-grin-487808-f7:asia-east1:minigames-db
+  _CLOUDSQL_INSTANCES: utility-grin-487808-f7:asia-southeast1:minigames-db
 
 options:
   logging: CLOUD_LOGGING_ONLY
