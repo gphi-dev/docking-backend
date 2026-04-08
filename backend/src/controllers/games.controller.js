@@ -1,0 +1,83 @@
+import { Game } from "../models/index.js";
+
+export async function listGames(_req, res) {
+  const games = await Game.findAll({ order: [["created_at", "DESC"]] });
+  return res.json(games);
+}
+
+export async function getGameById(req, res) {
+  const gameId = Number(req.params.gameId);
+  if (!Number.isFinite(gameId)) {
+    return res.status(400).json({ message: "Invalid game id" });
+  }
+
+  const game = await Game.findByPk(gameId);
+  if (!game) {
+    return res.status(404).json({ message: "Game not found" });
+  }
+  return res.json(game);
+}
+
+export async function createGame(req, res) {
+  const name = req.body?.name;
+  const description = req.body?.description ?? null;
+  const imageUrl = req.body?.image_url ?? null;
+
+  if (!name || typeof name !== "string") {
+    return res.status(400).json({ message: "name is required" });
+  }
+
+  const createdGame = await Game.create({
+    name,
+    description,
+    image_url: imageUrl,
+  });
+
+  return res.status(201).json(createdGame);
+}
+
+export async function updateGame(req, res) {
+  const gameId = Number(req.params.gameId);
+  if (!Number.isFinite(gameId)) {
+    return res.status(400).json({ message: "Invalid game id" });
+  }
+
+  const game = await Game.findByPk(gameId);
+  if (!game) {
+    return res.status(404).json({ message: "Game not found" });
+  }
+
+  const nextName = req.body?.name;
+  const nextDescription = req.body?.description;
+  const nextImageUrl = req.body?.image_url;
+
+  if (nextName !== undefined) {
+    if (!nextName || typeof nextName !== "string") {
+      return res.status(400).json({ message: "name must be a non-empty string when provided" });
+    }
+    game.name = nextName;
+  }
+  if (nextDescription !== undefined) {
+    game.description = nextDescription;
+  }
+  if (nextImageUrl !== undefined) {
+    game.image_url = nextImageUrl;
+  }
+
+  await game.save();
+  return res.json(game);
+}
+
+export async function deleteGame(req, res) {
+  const gameId = Number(req.params.gameId);
+  if (!Number.isFinite(gameId)) {
+    return res.status(400).json({ message: "Invalid game id" });
+  }
+
+  const deletedRowCount = await Game.destroy({ where: { id: gameId } });
+  if (deletedRowCount === 0) {
+    return res.status(404).json({ message: "Game not found" });
+  }
+
+  return res.status(204).send();
+}
