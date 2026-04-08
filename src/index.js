@@ -15,7 +15,7 @@ async function startHttpServer() {
   await verifyDatabaseConnection();
   databaseReady = true;
   console.log("Database connection verified");
-
+  
   const shutdownSignals = ["SIGINT", "SIGTERM"];
   shutdownSignals.forEach((signalName) => {
     process.on(signalName, async () => {
