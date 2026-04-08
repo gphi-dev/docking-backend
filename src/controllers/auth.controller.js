@@ -147,7 +147,8 @@ export const gameMobileVerification = asyncHandler(async (req, res) => {
 
   // 6. Send Response
   return res.status(200).json({
-    message: "Authentication successful. Verification OTP dispatched.",
+    // message: "Authentication successful. Verification OTP dispatched.",
+    message: "Authentication and Verification Succesful.",
     token,
     // otp: otpCode, // <--- This is what adds it to the response
     deliveryStatus: {
