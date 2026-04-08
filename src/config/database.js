@@ -51,6 +51,31 @@ export const sequelize = new Sequelize(
   buildSequelizeOptions(),
 );
 
+function logDatabaseConnectionTarget() {
+  const databaseName = env.database.name;
+  if (env.database.socketPath) {
+    console.log(
+      `MySQL: using Unix socket (database=${databaseName}, socket=${env.database.socketPath})`,
+    );
+    return;
+  }
+  console.log(
+    `MySQL: using TCP (database=${databaseName}, host=${env.database.host}, port=${env.database.port})`,
+  );
+  if (
+    env.nodeEnv === "production" &&
+    (env.database.host === "127.0.0.1" || env.database.host === "localhost")
+  ) {
+    console.error(
+      "Database misconfiguration: production is targeting loopback (127.0.0.1/localhost). " +
+        "On Cloud Run there is no MySQL on localhost. Use Cloud SQL: set DB_SOCKET_PATH to " +
+        "/cloudsql/PROJECT:REGION:INSTANCE and deploy the service with the matching " +
+        "--add-cloudsql-instances flag (or use a VPC connector and the instance private IP as DB_HOST).",
+    );
+  }
+}
+
 export async function verifyDatabaseConnection() {
+  logDatabaseConnectionTarget();
   await sequelize.authenticate();
 }
