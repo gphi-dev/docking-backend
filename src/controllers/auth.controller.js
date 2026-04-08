@@ -5,6 +5,15 @@ import { verifyPassword } from "../utils/password.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 /**
+ * @helper generateOTP
+ * @description Generates a random 6-digit OTP for verification
+ * @returns {string} 6-digit OTP
+ */
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+/**
  * @service mockSmsProvider
  * @description Simulates sending an SMS notification. 
  * (In production, extract this to src/services/sms.service.js)
@@ -86,7 +95,7 @@ export const loginAdmin = asyncHandler(async (req, res) => {
 
 /**
  * @controller gameMobileVerification
- * @description Authenticates a game session, generates a JWT, and dispatches a mock SMS
+ * @description Authenticates a game session, generates a JWT, and dispatches a mock SMS and OTP
  * @route POST /api/auth/game-login
  * @access Public
  */
@@ -113,14 +122,26 @@ export const gameMobileVerification = asyncHandler(async (req, res) => {
     { expiresIn: env.jwtExpiresIn || "8h" }
   );
 
-  // 3. Dispatch Notification
-  const message = `Welcome to game ${gameid}! Your session has started. please verify your mobile number ${usermobilenumber} to receive game updates.`;
-  const notificationResult = await mockSmsProvider(usermobilenumber, message);
+  // 3. Generate OTP
+  const otpCode = generateOTP();
 
-  // 4. Send Response
+  // 4. Dispatch Notification and OTP concurrently
+  const welcomeMessage = `Welcome to game ${gameid}! Your session has started.`;
+  const otpMessage = `Your verification code is: ${otpCode}. It is valid for 5 minutes.`;
+  
+  const [notificationResult, otpResult] = await Promise.all([
+    mockSmsProvider(usermobilenumber, welcomeMessage),
+    mockSmsProvider(usermobilenumber, otpMessage)
+  ]);
+
+  // 5. Send Response
   return res.status(200).json({
-    message: "Authentication successful.",
+    message: "Authentication successful. Verification OTP dispatched.",
     token,
-    notification: notificationResult
+    otp: otpCode, // <--- This is what adds it to the response
+    deliveryStatus: {
+      notificationSent: notificationResult.success,
+      otpSent: otpResult.success
+    }
   });
 });
