@@ -3,12 +3,18 @@ import { env } from "./config/env.js";
 import { sequelize, verifyDatabaseConnection } from "./config/database.js";
 
 async function startHttpServer() {
-  await verifyDatabaseConnection();
-
-  const app = createApp();
-  const server = app.listen(env.port, () => {
-    console.log(`API listening on port ${env.port} (${env.nodeEnv})`);
+  let databaseReady = false;
+  const app = createApp({
+    isDatabaseReady: () => databaseReady,
   });
+
+  const server = app.listen(env.port, "0.0.0.0", () => {
+    console.log(`API listening on 0.0.0.0:${env.port} (${env.nodeEnv})`);
+  });
+
+  await verifyDatabaseConnection();
+  databaseReady = true;
+  console.log("Database connection verified");
 
   const shutdownSignals = ["SIGINT", "SIGTERM"];
   shutdownSignals.forEach((signalName) => {

@@ -8,7 +8,12 @@ import { subscribersRouter } from "./routes/subscribers.routes.js";
 import { adminsRouter } from "./routes/admins.routes.js";
 import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
 
-export function createApp() {
+/**
+ * @param {object} [options]
+ * @param {() => boolean} [options.isDatabaseReady] When set, non-health routes return 503 until true (listen-before-DB startup).
+ */
+export function createApp(options = {}) {
+  const { isDatabaseReady } = options;
   const app = express();
 
   const corsOptions =
@@ -23,6 +28,18 @@ export function createApp() {
   }
 
   app.use(express.json({ limit: "1mb" }));
+
+  if (typeof isDatabaseReady === "function") {
+    app.use((req, res, next) => {
+      if (req.path === "/health") {
+        return next();
+      }
+      if (!isDatabaseReady()) {
+        return res.status(503).json({ message: "Database not ready" });
+      }
+      return next();
+    });
+  }
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
