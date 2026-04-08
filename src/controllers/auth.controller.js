@@ -134,7 +134,18 @@ export const gameMobileVerification = asyncHandler(async (req, res) => {
     mockSmsProvider(usermobilenumber, otpMessage)
   ]);
 
-  // 5. Send Response
+  // 5. Save session/OTP data to the database
+  // We store the OTP and mobile number so we can verify it in the next endpoint
+  await Session.create({
+    gameId: gameid,
+    mobileNumber: usermobilenumber,
+    otp: otpCode,
+    token: token, // Optional: Store to track active sessions
+    expiresAt: new Date(Date.now() + 5 * 60 * 1000) // OTP expires in 5 mins
+  });
+
+
+  // 6. Send Response
   return res.status(200).json({
     message: "Authentication successful. Verification OTP dispatched.",
     token,
