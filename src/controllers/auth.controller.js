@@ -99,7 +99,7 @@ export const loginAdmin = asyncHandler(async (req, res) => {
  * @route POST /api/auth/game-login
  * @access Public
  */
-import { UserMobile } from "../models/usersmobile.model.js";
+import { Usermobile } from "../models/usermobile.model.js";
 
 export async function createOtpSession(req, res) {
   const phone = req.body?.phone;
