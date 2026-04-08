@@ -75,7 +75,63 @@ function logDatabaseConnectionTarget() {
   }
 }
 
+function extractConnectionErrorCause(error) {
+  return error?.parent ?? error?.original ?? error;
+}
+
+function isSocketPathMissingError(error) {
+  const cause = extractConnectionErrorCause(error);
+  return cause?.code === "ENOENT";
+}
+
+async function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 export async function verifyDatabaseConnection() {
   logDatabaseConnectionTarget();
-  await sequelize.authenticate();
+
+  const maxAttempts = Math.max(1, Number(process.env.DB_CONNECT_MAX_ATTEMPTS || 30));
+  const retryDelayMs = Math.max(100, Number(process.env.DB_CONNECT_RETRY_DELAY_MS || 2000));
+
+  let lastError;
+  for (let attemptIndex = 1; attemptIndex <= maxAttempts; attemptIndex++) {
+    try {
+      await sequelize.authenticate();
+      if (attemptIndex > 1) {
+        console.log(`Database: connected after ${attemptIndex} attempts`);
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      const cause = extractConnectionErrorCause(error);
+      const errorCode = cause?.code ?? "unknown";
+      const errorMessage = cause?.message ?? error.message;
+
+      const shouldLogThisAttempt =
+        attemptIndex === 1 ||
+        attemptIndex === maxAttempts ||
+        attemptIndex % 5 === 0;
+      if (shouldLogThisAttempt) {
+        console.error(
+          `Database: attempt ${attemptIndex}/${maxAttempts} failed (${errorCode}): ${errorMessage}`,
+        );
+      }
+
+      if (attemptIndex === 1 && env.database.socketPath && isSocketPathMissingError(error)) {
+        console.error(
+          "Cloud SQL socket is missing (ENOENT). In the Cloud Run service, open Connections → Cloud SQL " +
+            "and add the instance whose connection name matches DB_SOCKET_PATH " +
+            "(format PROJECT:REGION:INSTANCE, same as /cloudsql/... on disk).",
+        );
+      }
+
+      if (attemptIndex >= maxAttempts) {
+        break;
+      }
+      await sleep(retryDelayMs);
+    }
+  }
+
+  throw lastError;
 }
