@@ -99,61 +99,42 @@ export const loginAdmin = asyncHandler(async (req, res) => {
  * @route POST /api/auth/game-login
  * @access Public
  */
-export const gameMobileVerification = asyncHandler(async (req, res) => {
-  const { gameid, gamesecretkey, usermobilenumber } = req.body;
+import { UserMobile } from "../models/usersmobile.model.js";
 
-  // 1. Validate Payload
-  if (!gameid || !gamesecretkey || !usermobilenumber) {
-    return res.status(400).json({ 
-      error: "Missing required fields: gameid, gamesecretkey, and usermobilenumber are required." 
-    });
+export async function createOtpSession(req, res) {
+  const phone = req.body?.phone;
+  const game_id = req.body?.game_id;
+
+  // 1. Validate required inputs
+  if (!phone || typeof phone !== "string") {
+    return res.status(400).json({ message: "phone is required" });
   }
 
-  // 2. Generate Session Token
-  const payload = {
-    gameId: gameid,
-    mobileNumber: usermobilenumber,
-    role: "player" 
-  };
+  if (!game_id) {
+    return res.status(400).json({ message: "game_id is required" });
+  }
 
-  const token = jwt.sign(
-    payload, 
-    env.jwtSecret, 
-    { expiresIn: env.jwtExpiresIn || "8h" }
-  );
+  try {
+    // 2. Generate OTP and calculate expiration
+    // Generates a random 6-digit string
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); 
+    
+    // OTP expires in 5 minutes
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); 
 
-  // 3. Generate OTP
-  const otpCode = generateOTP();
+    // 3. Save session/OTP data to the database
+    const createdSession = await UserMobile.create({
+      phone: phone,
+      game_id: game_id,
+      is_verified: 0, // Default to 0 based on image
+      verified_at: null,
+      otp: otpCode,
+      otp_expires_at: expiresAt,
+    });
 
-  // 4. Dispatch Notification and OTP concurrently
-  const welcomeMessage = `Welcome to game ${gameid}! Your session has started.`;
-  const otpMessage = `Your verification code is: ${otpCode}. It is valid for 5 minutes.`;
-  
-  const [notificationResult, otpResult] = await Promise.all([
-    mockSmsProvider(usermobilenumber, welcomeMessage),
-    mockSmsProvider(usermobilenumber, otpMessage)
-  ]);
-
-  // 5. Save session/OTP data to the database
-  // We store the OTP and mobile number so we can verify it in the next endpoint
-  await Session.create({
-    gameId: gameid,
-    mobileNumber: usermobilenumber,
-    otp: otpCode,
-    token: token, // Optional: Store to track active sessions
-    expiresAt: new Date(Date.now() + 5 * 60 * 1000) // OTP expires in 5 mins
-  });
-
-
-  // 6. Send Response
-  return res.status(200).json({
-    // message: "Authentication successful. Verification OTP dispatched.",
-    message: "Authentication and Verification Succesful.",
-    token,
-    // otp: otpCode, // <--- This is what adds it to the response
-    deliveryStatus: {
-      notificationSent: notificationResult.success,
-      otpSent: otpResult.success
-    }
-  });
-});
+    return res.status(201).json(createdSession);
+  } catch (error) {
+    console.error("Error saving OTP session:", error);
+    return res.status(500).json({ message: "Internal server error while creating session" });
+  }
+}
