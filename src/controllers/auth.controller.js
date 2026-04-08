@@ -123,7 +123,7 @@ export async function createOtpSession(req, res) {
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); 
 
     // 3. Save session/OTP data to the database
-    const createdSession = await UserMobile.create({
+    const createdSession = await Usermobile.create({
       phone: phone,
       game_id: game_id,
       is_verified: 0, // Default to 0 based on image

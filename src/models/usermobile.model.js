@@ -2,7 +2,7 @@ import { DataTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 
 export const Usermobile = sequelize.define(
-  "UserMobile",
+  "Usermobile",
   {
     id: {
       type: DataTypes.INTEGER.UNSIGNED,
@@ -10,11 +10,11 @@ export const Usermobile = sequelize.define(
       primaryKey: true,
     },
     phone: {
-      type: DataTypes.STRING(255), // Handles both numbers and strings like 'dummy_num_001'
+      type: DataTypes.STRING(20), // Handles both numbers and strings like 'dummy_num_001'
       allowNull: false,
     },
     game_id: {
-      type: DataTypes.STRING(255), // Handles both numbers and text like 'MarioBro'
+      type: DataTypes.STRING(50), // Handles both numbers and text like 'MarioBro'
       allowNull: false,
     },
     is_verified: {
