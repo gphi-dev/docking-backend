@@ -94,12 +94,12 @@ export const loginAdmin = asyncHandler(async (req, res) => {
 });
 
 /**
- * @controller gameMobileVerification
  * @description Authenticates a game session, generates a JWT, and dispatches a mock SMS and OTP
  * @route POST /api/auth/game-login
  * @access Public
  */
 import { Usermobile } from "../models/usermobile.model.js";
+
 
 export async function createOtpSession(req, res) {
   const phone = req.body?.phone;
@@ -115,24 +115,49 @@ export async function createOtpSession(req, res) {
   }
 
   try {
-    // 2. Generate OTP and calculate expiration
-    // Generates a random 6-digit string
+    // 2. VALIDATION: Check if phone + game_id already exists
+    const existingUser = await Usermobile.findOne({
+      where: {
+        phone: phone,
+        game_id: game_id
+      }
+    });
+
+    if (existingUser) {
+      return res.status(409).json({ message: "Phone number already used for this game" });
+    }
+
+    // 3. Generate OTP and calculate expiration
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); 
-    
-    // OTP expires in 5 minutes
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); 
 
-    // 3. Save session/OTP data to the database
+    // 4. Save session/OTP data to the database
     const createdSession = await Usermobile.create({
       phone: phone,
       game_id: game_id,
-      is_verified: 0, // Default to 0 based on image
+      is_verified: 0, 
       verified_at: null,
       otp: otpCode,
       otp_expires_at: expiresAt,
     });
 
-    return res.status(201).json(createdSession);
+    // 5. Generate the JWT (Bearer Token)
+    const secretKey = process.env.JWT_SECRET || "temporary_development_secret_key";
+    
+    const tokenPayload = {
+      sessionId: createdSession.id,
+      phone: createdSession.phone,
+      game_id: createdSession.game_id
+    };
+
+    const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '5m' });
+
+    // 6. Return the response including the token
+    return res.status(201).json({
+      ...createdSession.toJSON(), 
+      token: token                
+    });
+
   } catch (error) {
     console.error("Error saving OTP session:", error);
     return res.status(500).json({ message: "Internal server error while creating session" });
