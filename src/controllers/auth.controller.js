@@ -100,12 +100,13 @@ export const loginAdmin = asyncHandler(async (req, res) => {
  */
 import { Usermobile } from "../models/usermobile.model.js";
 
+
 export async function createOtpSession(req, res) {
-  const phone = req.body?.phone;
+  let phone = req.body?.phone;
   const game_id = req.body?.game_id;
 
-  // 1. Validate required inputs
-  if (!phone || typeof phone !== "string") {
+  // 1. Initial existence checks
+  if (!phone) {
     return res.status(400).json({ 
       success: false, 
       errorCode: "ERR_MISSING_PHONE", 
@@ -121,11 +122,39 @@ export async function createOtpSession(req, res) {
     });
   }
 
+  // 2. PHONE VALIDATION & TRANSFORMATION
+  // Convert to string (in case a raw number was sent) and trim whitespace
+  phone = String(phone).trim();
+
+  // If the user inputted a leading 0, remove it
+  if (phone.startsWith("0")) {
+    phone = phone.slice(1);
+  }
+
+  // Check if the resulting string contains ONLY numbers (0-9)
+  const isOnlyNumbers = /^\d+$/.test(phone);
+  if (!isOnlyNumbers) {
+    return res.status(400).json({ 
+      success: false, 
+      errorCode: "ERR_INVALID_PHONE_FORMAT", 
+      message: "Phone must contain only numbers" 
+    });
+  }
+
+  // Check if it is exactly 10 digits long (after removing the 0)
+  if (phone.length !== 10) {
+    return res.status(400).json({ 
+      success: false, 
+      errorCode: "ERR_INVALID_PHONE_LENGTH", 
+      message: "Phone must be exactly 10 digits (excluding the leading zero)" 
+    });
+  }
+
   try {
-    // 2. VALIDATION: Check if phone + game_id already exists
+    // 3. VALIDATION: Check if phone + game_id already exists
     const existingUser = await Usermobile.findOne({
       where: {
-        phone: phone,
+        phone: phone, // This is now the clean, 10-digit version without the '0'
         game_id: game_id
       }
     });
@@ -138,13 +167,13 @@ export async function createOtpSession(req, res) {
       });
     }
 
-    // 3. Generate OTP and calculate expiration
+    // 4. Generate OTP and calculate expiration
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); 
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); 
 
-    // 4. Save session/OTP data to the database
+    // 5. Save session/OTP data to the database
     const createdSession = await Usermobile.create({
-      phone: phone,
+      phone: phone, // Saves the transformed 10-digit number
       game_id: game_id,
       is_verified: 0, 
       verified_at: null,
@@ -152,7 +181,7 @@ export async function createOtpSession(req, res) {
       otp_expires_at: expiresAt,
     });
 
-    // 5. Generate the JWT (Bearer Token)
+    // 6. Generate the JWT (Bearer Token)
     const secretKey = process.env.JWT_SECRET || "temporary_development_secret_key";
     
     const tokenPayload = {
@@ -163,35 +192,30 @@ export async function createOtpSession(req, res) {
 
     const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '5m' });
 
-    // 6. Return the response with data array (only game_id) and token at the root
+    // 7. Return the success response
     return res.status(201).json({
+      token: token,
       success: true,
       successCode: "SUCCESS_SESSION_CREATED",
-      token: token,
       data: [
         {
-          phone: createdSession.phone,
           game_id: createdSession.game_id
         }
-      ]            
+      ]        
     });
-    
+
   } catch (error) {
-    // Log the full error to your server console/Cloud Run logs for debugging
     console.error("Error saving OTP session:", error);
 
-    // 1. Database Validation Errors (e.g., string too long, wrong data type)
     if (error.name === 'SequelizeValidationError') {
       return res.status(400).json({
         success: false,
         errorCode: "ERR_DB_VALIDATION_2001",
         message: "Invalid data provided to the database.",
-        // Maps the specific field errors so you know exactly what failed
         details: error.errors?.map(err => err.message) 
       });
     }
 
-    // 2. Database Unique Constraint Errors (e.g., A sudden race condition bypassed our earlier findOne check)
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(409).json({
         success: false,
@@ -200,7 +224,6 @@ export async function createOtpSession(req, res) {
       });
     }
 
-    // 3. Database Connection Errors (e.g., Cloud Run lost connection to Cloud SQL)
     if (error.name === 'SequelizeConnectionError' || error.name === 'SequelizeConnectionRefusedError') {
       return res.status(503).json({
         success: false,
@@ -209,7 +232,6 @@ export async function createOtpSession(req, res) {
       });
     }
 
-    // 4. JWT Generation Errors
     if (error.name === 'JsonWebTokenError') {
       return res.status(500).json({
         success: false,
@@ -218,7 +240,6 @@ export async function createOtpSession(req, res) {
       });
     }
 
-    // 5. Fallback for any other unexpected catastrophic failures
     return res.status(500).json({ 
       success: false, 
       errorCode: "ERR_INTERNAL_SERVER_5000", 
