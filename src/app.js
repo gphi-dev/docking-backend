@@ -16,16 +16,19 @@ export function createApp(options = {}) {
   const { isDatabaseReady } = options;
   const app = express();
 
-  const corsOptions =
-    env.corsOrigins.length > 0
-      ? { origin: env.corsOrigins }
-      : env.nodeEnv === "development"
-        ? { origin: "http://localhost:5173" }
-        : false;
 
-  if (corsOptions) {
-    app.use(cors(corsOptions));
-  }
+  const corsOptions = {
+    // change to * for ALL origins
+    origin: "*", 
+    
+    // restict POST Method
+    methods: ["POST"], 
+    
+   
+    optionsSuccessStatus: 200 
+  };
+
+  app.use(cors(corsOptions));
 
   app.use(express.json({ limit: "1mb" }));
 
@@ -41,12 +44,13 @@ export function createApp(options = {}) {
     });
   }
 
+  // NOTE: Even though this GET route exists, browsers making cross-origin requests 
+  // to this endpoint will now block the response due to the POST-only CORS policy.
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
 
   app.use("/api/auth", authRouter);
-
   app.use("/api/games", authenticateAdminJwt, gamesRouter);
   app.use("/api/subscribers", authenticateAdminJwt, subscribersRouter);
   app.use("/api/admins", authenticateAdminJwt, adminsRouter);
