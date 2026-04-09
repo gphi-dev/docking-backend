@@ -100,18 +100,25 @@ export const loginAdmin = asyncHandler(async (req, res) => {
  */
 import { Usermobile } from "../models/usermobile.model.js";
 
-
 export async function createOtpSession(req, res) {
   const phone = req.body?.phone;
   const game_id = req.body?.game_id;
 
   // 1. Validate required inputs
   if (!phone || typeof phone !== "string") {
-    return res.status(400).json({ message: "phone is required" });
+    return res.status(400).json({ 
+      success: false, 
+      errorCode: "ERR_MISSING_PHONE", 
+      message: "phone is required" 
+    });
   }
 
   if (!game_id) {
-    return res.status(400).json({ message: "game_id is required" });
+    return res.status(400).json({ 
+      success: false, 
+      errorCode: "ERR_MISSING_GAME_ID", 
+      message: "game_id is required" 
+    });
   }
 
   try {
@@ -124,7 +131,11 @@ export async function createOtpSession(req, res) {
     });
 
     if (existingUser) {
-      return res.status(409).json({ message: "Phone number already used for this game" });
+      return res.status(409).json({ 
+        success: false, 
+        errorCode: "ERR_PHONE_ALREADY_USED", 
+        message: "Phone number already used for this game" 
+      });
     }
 
     // 3. Generate OTP and calculate expiration
@@ -152,14 +163,66 @@ export async function createOtpSession(req, res) {
 
     const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '5m' });
 
-    // 6. Return the response including the token
+    // 6. Return the response with data array (only game_id) and token at the root
     return res.status(201).json({
-      ...createdSession.toJSON(), 
-      token: token                
+      success: true,
+      successCode: "SUCCESS_SESSION_CREATED",
+      token: token,
+      data: [
+        {
+          phone: createdSession.phone,
+          game_id: createdSession.game_id
+        }
+      ]            
     });
-
+    
   } catch (error) {
+    // Log the full error to your server console/Cloud Run logs for debugging
     console.error("Error saving OTP session:", error);
-    return res.status(500).json({ message: "Internal server error while creating session" });
+
+    // 1. Database Validation Errors (e.g., string too long, wrong data type)
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({
+        success: false,
+        errorCode: "ERR_DB_VALIDATION_2001",
+        message: "Invalid data provided to the database.",
+        // Maps the specific field errors so you know exactly what failed
+        details: error.errors?.map(err => err.message) 
+      });
+    }
+
+    // 2. Database Unique Constraint Errors (e.g., A sudden race condition bypassed our earlier findOne check)
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(409).json({
+        success: false,
+        errorCode: "ERR_DB_DUPLICATE_2002",
+        message: "This record already exists in the database."
+      });
+    }
+
+    // 3. Database Connection Errors (e.g., Cloud Run lost connection to Cloud SQL)
+    if (error.name === 'SequelizeConnectionError' || error.name === 'SequelizeConnectionRefusedError') {
+      return res.status(503).json({
+        success: false,
+        errorCode: "ERR_DB_CONNECTION_5001",
+        message: "Service temporarily unavailable due to database connection issues."
+      });
+    }
+
+    // 4. JWT Generation Errors
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(500).json({
+        success: false,
+        errorCode: "ERR_JWT_GENERATION_5002",
+        message: "Failed to generate authentication token."
+      });
+    }
+
+    // 5. Fallback for any other unexpected catastrophic failures
+    return res.status(500).json({ 
+      success: false, 
+      errorCode: "ERR_INTERNAL_SERVER_5000", 
+      message: "An unexpected internal server error occurred while creating the session." 
+    });
   }
 }
