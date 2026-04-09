@@ -16,16 +16,19 @@ export function createApp(options = {}) {
   const { isDatabaseReady } = options;
   const app = express();
 
-  const corsOptions =
-    env.corsOrigins.length > 0
-      ? { origin: env.corsOrigins }
-      : env.nodeEnv === "development"
-        ? { origin: "http://localhost:5173" }
-        : false;
+  // update cors allow all origins , restrict to post method 
+  const corsOptions = {
+    // add * for ALL origins.
+    origin: "*", 
+    
+    // restricts  HTTP methods to POST only. 
+    methods: ["POST"], 
+    
+    // added: Returns a 200 compatibility.
+    optionsSuccessStatus: 200 
+  };
 
-  if (corsOptions) {
-    app.use(cors(corsOptions));
-  }
+  app.use(cors(corsOptions));
 
   app.use(express.json({ limit: "1mb" }));
 
@@ -41,6 +44,7 @@ export function createApp(options = {}) {
     });
   }
 
+  // blocks all GET request because POST-only CORS policy.
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
