@@ -147,7 +147,7 @@ export async function createOtpSession(req, res) {
     return res.status(400).json({ 
       success: false, 
       errorCode: "ERR_INVALID_PHONE_LENGTH", 
-      message: "Phone must be exactly 10 digits (excluding the leading zero)" 
+      message: "Phone must be exactly 10 digits (excluding the zero)" 
     });
   }
 
