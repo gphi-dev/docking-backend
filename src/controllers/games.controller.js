@@ -1,7 +1,42 @@
+import { QueryTypes } from "sequelize";
+import { sequelize } from "../config/database.js";
 import { Game } from "../models/index.js";
 
+async function hasGamesTableColumn(columnName) {
+  const tableDefinition = await sequelize.getQueryInterface().describeTable("games");
+  return Object.prototype.hasOwnProperty.call(tableDefinition, columnName);
+}
+
+async function selectGamesWithOptionalGameId(whereClause = "", replacements = {}) {
+  const includesGameId = await hasGamesTableColumn("game_id");
+  const selectedColumns = [
+    "id",
+    "name",
+    "description",
+    "image_url",
+    "created_at",
+  ];
+
+  if (includesGameId) {
+    selectedColumns.splice(1, 0, "game_id");
+  }
+
+  const games = await sequelize.query(
+    `SELECT ${selectedColumns.join(", ")} FROM games ${whereClause}`.trim(),
+    {
+      replacements,
+      type: QueryTypes.SELECT,
+    },
+  );
+
+  return games.map((game) => ({
+    ...game,
+    game_id: game.game_id ?? null,
+  }));
+}
+
 export async function listGames(_req, res) {
-  const games = await Game.findAll({ order: [["created_at", "DESC"]] });
+  const games = await selectGamesWithOptionalGameId("ORDER BY created_at DESC");
   return res.json(games);
 }
 
@@ -11,7 +46,7 @@ export async function getGameById(req, res) {
     return res.status(400).json({ message: "Invalid game id" });
   }
 
-  const game = await Game.findByPk(gameId);
+  const [game] = await selectGamesWithOptionalGameId("WHERE id = :gameId LIMIT 1", { gameId });
   if (!game) {
     return res.status(404).json({ message: "Game not found" });
   }
@@ -20,6 +55,8 @@ export async function getGameById(req, res) {
 
 export async function createGame(req, res) {
   const name = req.body?.name;
+  const game_id = Number(req.body?.game_id);
+  const game_secret_key = req.body?.game_secret_key;
   const description = req.body?.description ?? null;
   const imageUrl = req.body?.image_url ?? null;
 
@@ -29,6 +66,8 @@ export async function createGame(req, res) {
 
   const createdGame = await Game.create({
     name,
+    game_id,
+    game_secret_key,
     description,
     image_url: imageUrl,
   });
@@ -48,6 +87,8 @@ export async function updateGame(req, res) {
   }
 
   const nextName = req.body?.name;
+  const nextGameId = Number(req.body?.game_id);
+  const nextGameSecretKey = req.body?.game_secret_key;
   const nextDescription = req.body?.description;
   const nextImageUrl = req.body?.image_url;
 
@@ -56,6 +97,15 @@ export async function updateGame(req, res) {
       return res.status(400).json({ message: "name must be a non-empty string when provided" });
     }
     game.name = nextName;
+  }
+  if (nextGameId !== undefined) {
+    if (!Number.isFinite(nextGameId)) {
+      return res.status(400).json({ message: "game_id must be a valid integer" });
+    }
+    game.game_id = nextGameId;
+  }
+  if (nextGameSecretKey !== undefined) {
+    game.game_secret_key = nextGameSecretKey;
   }
   if (nextDescription !== undefined) {
     game.description = nextDescription;

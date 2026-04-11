@@ -9,15 +9,30 @@ export async function listUsermobile(_req, res) {
   return res.json(usermobiles);
 }
 
-export async function getGameByPhone(req, res) {
+export async function getUsermobileSubscribedGame(req, res) {
+  const gameIdParam = req.params.gameId;
+
+  if (!gameIdParam) {
+    return res.status(400).json({ message: "Invalid game id" });
+  }
+
+  const usermobiles = await Usermobile.findAll({
+    where: { game_id: String(gameIdParam) },
+    order: [["created_at", "DESC"]],
+    attributes: { exclude: ["otp", "otp_expires_at"] },
+  });
+
+  return res.json(usermobiles);
+}
+
+// FIX: Renamed from 'getGameByPhone' to accurately reflect the data being returned.
+export async function getUsermobileByPhone(req, res) {
   const phoneParam = req.params.phone;
 
-  // Check if the phone parameter was provided at all
   if (!phoneParam) {
     return res.status(400).json({ message: "Invalid phone number" });
   }
 
-  // Use findOne since 'phone' is a standard column, not the Primary Key (id)
   const usermobile = await Usermobile.findOne({
     where: { phone: phoneParam },
     attributes: { exclude: ["otp", "otp_expires_at"] }
@@ -42,7 +57,8 @@ export async function createUsermobile(req, res) {
     game_id,
   });
 
-  const responseData = newUsermobile.toJSON();
+  // FIX: Using Sequelize's get() method for a cleaner, detached object payload
+  const responseData = newUsermobile.get({ plain: true });
   delete responseData.otp;
   delete responseData.otp_expires_at;
 

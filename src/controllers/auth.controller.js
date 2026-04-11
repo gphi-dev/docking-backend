@@ -176,7 +176,6 @@ export async function createOtpSession(req, res) {
       phone: phone, // Saves the transformed 10-digit number
       game_id: game_id,
       is_verified: 0, 
-      verified_at: null,
       otp: otpCode,
       otp_expires_at: expiresAt,
     });
