@@ -87,7 +87,7 @@ export async function createUsermobile(req, res) {
  * @access Public
  * @returns {Array} Array of objects with phone (masked), game_id, and points
  */
-export async function getUsersMaskedList(req, res) {
+export async function getUsersMaskedScoreList(req, res) {
   try {
     const users = await Usermobile.findAll({
       attributes: ['phone', 'game_id', 'points'],
@@ -110,6 +110,43 @@ export async function getUsersMaskedList(req, res) {
     return res.status(200).json(maskedUsers);
   } catch (error) {
     console.error('Error retrieving users:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+
+export async function getUsersMaskedScoreListByGame(req, res) {
+  const { game_id } = req.body;
+
+  if (game_id === undefined || game_id === null) {
+    return res.status(400).json({ message: "game_id is required" });
+  }
+
+  // Safety check: Ensure game_id is a numeric value and not a non-numeric string.
+  if (!/^\d+$/.test(String(game_id))) {
+    return res.status(400).json({ message: "game_id must be a numeric value." });
+  }
+
+  try {
+    const users = await Usermobile.findAll({
+      where: { game_id: String(game_id) },
+      attributes: ['phone', 'game_id', 'points'],
+      order: [['created_at', 'DESC']],
+      limit: 2, // Limit to the top 2 results
+    });
+
+    const maskedUsers = users.map(user => {
+      const userData = user.get({ plain: true });
+      return {
+        phone: maskPhoneNumber(userData.phone),
+        game_id: userData.game_id,
+        points: userData.points,
+      };
+    });
+
+    return res.status(200).json(maskedUsers);
+  } catch (error) {
+    console.error('Error retrieving masked users by game:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }
