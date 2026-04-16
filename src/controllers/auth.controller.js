@@ -104,8 +104,9 @@ import { Usermobile } from "../models/usermobile.model.js";
 export async function createOtpSession(req, res) {
   let phone = req.body?.phone;
   const game_id = req.body?.game_id;
+  const points = req.body?.points ?? 0;
 
-  // 1. Initial existence checks
+  //Initial existence checks
   if (!phone) {
     return res.status(400).json({ 
       success: false, 
@@ -122,7 +123,7 @@ export async function createOtpSession(req, res) {
     });
   }
 
-  // 2. PHONE VALIDATION & TRANSFORMATION
+  // PHONE VALIDATION & TRANSFORMATION
   // Convert to string (in case a raw number was sent) and trim whitespace
   phone = String(phone).trim();
 
@@ -151,7 +152,7 @@ export async function createOtpSession(req, res) {
   }
 
   try {
-    // 3. VALIDATION: Check if phone + game_id already exists
+    // VALIDATION: Check if phone + game_id already exists
     const existingUser = await Usermobile.findOne({
       where: {
         phone: phone, // This is now the clean, 10-digit version without the '0'
@@ -167,17 +168,18 @@ export async function createOtpSession(req, res) {
       });
     }
 
-    // 4. Generate OTP and calculate expiration
+    // Generate OTP and calculate expiration
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); 
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); 
 
-    // 5. Save session/OTP data to the database
+    // Save session/OTP data to the database
     const createdSession = await Usermobile.create({
       phone: phone, // Saves the transformed 10-digit number
       game_id: game_id,
-      is_verified: 0, 
+      is_verified: 1, 
       otp: otpCode,
       otp_expires_at: expiresAt,
+      points: points,
     });
 
     // 6. Generate the JWT (Bearer Token)
@@ -198,7 +200,9 @@ export async function createOtpSession(req, res) {
       successCode: "SUCCESS_SESSION_CREATED",
       data: [
         {
-          game_id: createdSession.game_id
+          game_id: createdSession.game_id,
+          points: createdSession.points,
+          phone: createdSession.phone
         }
       ]        
     });

@@ -3,7 +3,8 @@ import {
   listUsermobile,
   getUsermobileByPhone, 
   createUsermobile,
-  getUsermobileSubscribedGame 
+  getUsermobileSubscribedGame,
+  getUsersMaskedList
 } from "../controllers/usermobile.controller.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
@@ -11,6 +12,9 @@ export const usermobileRouter = Router();
 
 // GET /api/usermobile
 usermobileRouter.get("/", asyncHandler(listUsermobile));
+
+// GET /api/usermobile/masked
+usermobileRouter.get("/masked", asyncHandler(getUsersMaskedList));
 
 // GET /api/usermobile/games/:gameId 
 usermobileRouter.get("/games/:gameId", asyncHandler(getUsermobileSubscribedGame));
