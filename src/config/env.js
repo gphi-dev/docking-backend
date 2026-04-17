@@ -2,6 +2,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const defaultProductionCorsOrigins = ["https://docking-frontend-635955947416.asia-east1.run.app"];
+
 function normalizeOrigin(origin) {
   return origin.replace(/\/+$/, "");
 }
@@ -23,16 +25,17 @@ export const env = {
   jwtSecret: process.env.JWT_SECRET || "dev-only-change-me",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "8h",
   corsOrigins: readCommaSeparatedOrigins(process.env.CORS_ORIGINS),
-database: {
+  defaultProductionCorsOrigins,
+  database: {
     name: process.env.DB_NAME || "main",
     user: process.env.DB_USER || "dev",
     password: process.env.DB_PASSWORD || "3zqknH$$.^rjCFTP",
     host: process.env.DB_HOST || "136.110.11.139",
     port: Number(process.env.DB_PORT || 3306),
-    
+
     // IMPORTANT: Change this back to null for local development
-    socketPath: process.env.DB_SOCKET_PATH || null, 
-    
+    socketPath: process.env.DB_SOCKET_PATH || null,
+
     poolMax: Number(process.env.DB_POOL_MAX || 5),
     poolMin: Number(process.env.DB_POOL_MIN || 0),
     poolAcquireMs: Number(process.env.DB_POOL_ACQUIRE_MS || 30000),

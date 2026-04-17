@@ -17,7 +17,7 @@ export function createApp() {
       ? env.corsOrigins
       : env.nodeEnv === "development"
         ? ["http://localhost:5173"]
-        : [];
+        : env.defaultProductionCorsOrigins;
 
   const corsOptions =
     allowedOrigins.length > 0
