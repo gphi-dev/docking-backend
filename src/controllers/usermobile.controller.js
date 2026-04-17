@@ -1,4 +1,4 @@
-import { Usermobile } from "../models/index.js";
+import { Usermobile, Game } from "../models/index.js";
 
 /**
  * @utility maskPhoneNumber
@@ -15,11 +15,19 @@ function maskPhoneNumber(phone) {
 } 
 
 export async function listUsermobile(_req, res) {
-  const usermobiles = await Usermobile.findAll({ 
+  const usermobiles = await Usermobile.findAll({
+    include: [
+      {
+        model: Game,
+        as: "game",
+        attributes: ["name"],
+        required: true, // INNER JOIN to match the SQL
+      },
+    ],
     order: [["created_at", "DESC"]],
-    attributes: { exclude: ["otp", "otp_expires_at"] }
+    attributes: { exclude: ["otp", "otp_expires_at"] },
   });
-  
+
   return res.json(usermobiles);
 }
 
