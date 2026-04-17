@@ -2,6 +2,10 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+function normalizeOrigin(origin) {
+  return origin.replace(/\/+$/, "");
+}
+
 function readCommaSeparatedOrigins(rawValue) {
   if (!rawValue || typeof rawValue !== "string") {
     return [];
@@ -9,6 +13,7 @@ function readCommaSeparatedOrigins(rawValue) {
   return rawValue
     .split(",")
     .map((origin) => origin.trim())
+    .map((origin) => normalizeOrigin(origin))
     .filter(Boolean);
 }
 

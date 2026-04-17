@@ -1,5 +1,8 @@
 import { Usermobile, Game } from "../models/index.js";
 
+const DEFAULT_USERMOBILE_PAGE_SIZE = 20;
+const MAX_USERMOBILE_PAGE_SIZE = 100;
+
 /**
  * @utility maskPhoneNumber
  * @description Masks a 10-digit phone number to format: XXX-****-XXX
@@ -12,10 +15,30 @@ function maskPhoneNumber(phone) {
     return phone;
   }
   return `${phone.substring(0, 3)}-****-${phone.substring(7, 10)}`;
-} 
+}
 
-export async function listUsermobile(_req, res) {
+function parsePositiveInteger(rawValue, fallbackValue) {
+  const parsedValue = Number.parseInt(String(rawValue ?? ""), 10);
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return fallbackValue;
+  }
+  return parsedValue;
+}
+
+export async function listUsermobile(req, res) {
+  const requestedPage = parsePositiveInteger(req.query.page, 1);
+  const requestedPageSize = parsePositiveInteger(req.query.pageSize, DEFAULT_USERMOBILE_PAGE_SIZE);
+  const pageSize = Math.min(requestedPageSize, MAX_USERMOBILE_PAGE_SIZE);
+  const gameId = String(req.query.gameId ?? "").trim();
+  const where = gameId ? { game_id: gameId } : undefined;
+
+  const totalCount = await Usermobile.count({ where });
+  const totalPages = totalCount === 0 ? 1 : Math.ceil(totalCount / pageSize);
+  const page = Math.min(requestedPage, totalPages);
+  const offset = (page - 1) * pageSize;
+
   const usermobiles = await Usermobile.findAll({
+    where,
     include: [
       {
         model: Game,
@@ -26,9 +49,17 @@ export async function listUsermobile(_req, res) {
     ],
     order: [["created_at", "DESC"]],
     attributes: { exclude: ["otp", "otp_expires_at"] },
+    limit: pageSize,
+    offset,
   });
 
-  return res.json(usermobiles);
+  return res.json({
+    items: usermobiles,
+    total: totalCount,
+    page,
+    pageSize,
+    totalPages,
+  });
 }
 
 export async function getUsermobileSubscribedGame(req, res) {
