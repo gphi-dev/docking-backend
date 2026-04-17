@@ -29,6 +29,11 @@ export const Game = sequelize.define(
       type: DataTypes.STRING(2048),
       allowNull: true,
     },
+    slug: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      unique: true,
+    },
   },
   {
     tableName: "games",

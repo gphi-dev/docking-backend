@@ -21,5 +21,9 @@ export const Admin = sequelize.define(
   },
   {
     tableName: "admins",
-  },
+    // ADD THESE LINES TO FIX THE CRASH:
+    timestamps: true,
+    createdAt: "created_at", // Maps Sequelize's createdAt to your DB's created_at
+    updatedAt: false,        // Tells Sequelize not to look for an updatedAt column
+  }
 );

@@ -33,6 +33,10 @@ export const Usermobile = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    points: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
   },
   {
     tableName: "usersmobile",
