@@ -12,15 +12,26 @@ import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
 export function createApp() {
   const app = express();
 
-  const corsOptions =
+  const allowedOrigins =
     env.corsOrigins.length > 0
-      ? { origin: env.corsOrigins }
+      ? env.corsOrigins
       : env.nodeEnv === "development"
-        ? { origin: "http://localhost:5173" }
-        : false;
+        ? ["http://localhost:5173"]
+        : env.defaultProductionCorsOrigins;
+
+  const corsOptions =
+    allowedOrigins.length > 0
+      ? {
+          origin: allowedOrigins,
+          methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+          allowedHeaders: ["Content-Type", "Authorization"],
+          optionsSuccessStatus: 204,
+        }
+      : false;
 
   if (corsOptions) {
     app.use(cors(corsOptions));
+    app.options("*", cors(corsOptions));
   }
 
   app.use(express.json({ limit: "1mb" }));

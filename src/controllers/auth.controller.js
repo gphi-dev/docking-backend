@@ -38,7 +38,7 @@ const mockSmsProvider = async (mobile, text) => {
 /**
  * @controller loginAdmin
  * @description Authenticates an admin user and issues a JWT
- * @route POST /api/admin/login
+ * @route POST /api/auth/login
  * @access Public
  */
 export const loginAdmin = asyncHandler(async (req, res) => {
