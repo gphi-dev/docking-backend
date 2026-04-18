@@ -13,6 +13,14 @@ export const Game = sequelize.define(
       type: DataTypes.STRING(255),
       allowNull: false,
     },
+    game_id: {
+      type: DataTypes.STRING(45),
+      allowNull: true,
+    },
+    gamesecretkey: {
+      type: DataTypes.STRING(45),
+      allowNull: true,
+    },
     description: {
       type: DataTypes.TEXT,
       allowNull: true,
@@ -20,6 +28,11 @@ export const Game = sequelize.define(
     image_url: {
       type: DataTypes.STRING(2048),
       allowNull: true,
+    },
+    slug: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      unique: true,
     },
   },
   {

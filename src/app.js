@@ -12,6 +12,7 @@ import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
 export function createApp() {
   const app = express();
 
+<<<<<<< HEAD
   app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
@@ -24,6 +25,8 @@ export function createApp() {
     return next();
   });
 
+=======
+>>>>>>> 5d2b32343389eb6bb0a81dc4e362816a68cde237
   const allowedOrigins =
     env.corsOrigins.length > 0
       ? env.corsOrigins
