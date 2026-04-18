@@ -6,56 +6,59 @@ import { authRouter } from "./routes/auth.routes.js";
 import { gamesRouter } from "./routes/games.routes.js";
 import { subscribersRouter } from "./routes/subscribers.routes.js";
 import { adminsRouter } from "./routes/admins.routes.js";
+import { usermobileRouter } from "./routes/usermobile.routes.js"; // Adjust path if needed
 import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
 
-/**
- * @param {object} [options]
- * @param {() => boolean} [options.isDatabaseReady] When set, non-health routes return 503 until true (listen-before-DB startup).
- */
-export function createApp(options = {}) {
-  const { isDatabaseReady } = options;
+export function createApp() {
   const app = express();
 
+  app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-  const corsOptions = {
-    // change to * for ALL origins
-    origin: "*", 
-    
-    // restict POST Method
-    methods: ["POST"], 
-    
-   
-    optionsSuccessStatus: 200 
-  };
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(204);
+    }
 
-  // UPDATED: Unconditionally apply the CORS middleware with the newly defined options.
-  // This replaces the previous `if (corsOptions)` check.
-  app.use(cors(corsOptions));
+    return next();
+  });
+
+  const allowedOrigins =
+    env.corsOrigins.length > 0
+      ? env.corsOrigins
+      : env.nodeEnv === "development"
+        ? ["http://localhost:5173"]
+        : env.defaultProductionCorsOrigins;
+
+  const corsOptions =
+    allowedOrigins.length > 0
+      ? {
+          origin: allowedOrigins,
+          methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+          allowedHeaders: ["Content-Type", "Authorization"],
+          optionsSuccessStatus: 204,
+        }
+      : false;
+
+  if (corsOptions) {
+    app.use(cors(corsOptions));
+    app.options("*", cors(corsOptions));
+  }
 
   app.use(express.json({ limit: "1mb" }));
 
-  if (typeof isDatabaseReady === "function") {
-    app.use((req, res, next) => {
-      if (req.path === "/health") {
-        return next();
-      }
-      if (!isDatabaseReady()) {
-        return res.status(503).json({ message: "Database not ready" });
-      }
-      return next();
-    });
-  }
-
-  // NOTE: Even though this GET route exists, browsers making cross-origin requests 
-  // to this endpoint will now block the response due to the POST-only CORS policy.
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
 
   app.use("/api/auth", authRouter);
+
   app.use("/api/games", authenticateAdminJwt, gamesRouter);
   app.use("/api/subscribers", authenticateAdminJwt, subscribersRouter);
   app.use("/api/admins", authenticateAdminJwt, adminsRouter);
+
+  app.use("/api/usermobile", usermobileRouter);
 
   app.use((req, res) => {
     res.status(404).json({ message: `Route not found: ${req.method} ${req.path}` });
