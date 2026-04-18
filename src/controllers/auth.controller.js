@@ -101,22 +101,10 @@ export const loginAdmin = asyncHandler(async (req, res) => {
 
 import { Usermobile } from "../models/usermobile.model.js";
 
-<<<<<<< HEAD
-
 export async function createOtpSession(req, res) {
   let phone = req.body?.phone;
   const game_id = req.body?.game_id;
-
-  // 1. Initial existence checks
-=======
-
-export async function createOtpSession(req, res) {
-  let phone = req.body?.phone;
-  const game_id = req.body?.game_id;
-  const points = req.body?.points ?? 0;
-
-  //Initial existence checks
->>>>>>> 5d2b32343389eb6bb0a81dc4e362816a68cde237
+  // Initial existence checks
   if (!phone) {
     return res.status(400).json({ 
       success: false, 
@@ -133,11 +121,7 @@ export async function createOtpSession(req, res) {
     });
   }
 
-<<<<<<< HEAD
-  // 2. PHONE VALIDATION & TRANSFORMATION
-=======
   // PHONE VALIDATION & TRANSFORMATION
->>>>>>> 5d2b32343389eb6bb0a81dc4e362816a68cde237
   // Convert to string (in case a raw number was sent) and trim whitespace
   phone = String(phone).trim();
 
@@ -161,20 +145,12 @@ export async function createOtpSession(req, res) {
     return res.status(400).json({ 
       success: false, 
       errorCode: "ERR_INVALID_PHONE_LENGTH", 
-<<<<<<< HEAD
       message: "Phone must be exactly 10 digits (excluding the zero)" 
-=======
-      message: "Phone must be exactly 10 digits (excluding the leading zero)" 
->>>>>>> 5d2b32343389eb6bb0a81dc4e362816a68cde237
     });
   }
 
   try {
-<<<<<<< HEAD
-    // 3. VALIDATION: Check if phone + game_id already exists
-=======
     // VALIDATION: Check if phone + game_id already exists
->>>>>>> 5d2b32343389eb6bb0a81dc4e362816a68cde237
     const existingUser = await Usermobile.findOne({
       where: {
         phone: phone, // This is now the clean, 10-digit version without the '0'
@@ -190,12 +166,11 @@ export async function createOtpSession(req, res) {
       });
     }
 
-<<<<<<< HEAD
-    // 4. Generate OTP and calculate expiration
+    // Generate OTP and calculate expiration
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); 
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); 
 
-    // 5. Save session/OTP data to the database
+    // Save session/OTP data to the database
     const createdSession = await Usermobile.create({
       phone: phone, // Saves the transformed 10-digit number
       game_id: game_id,
@@ -205,7 +180,7 @@ export async function createOtpSession(req, res) {
       otp_expires_at: expiresAt,
     });
 
-    // 6. Generate the JWT (Bearer Token)
+    // Generate the JWT (Bearer Token)
     const secretKey = process.env.JWT_SECRET || "temporary_development_secret_key";
     
     const tokenPayload = {
@@ -216,7 +191,7 @@ export async function createOtpSession(req, res) {
 
     const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '5m' });
 
-    // 7. Return the success response
+    // Return the success response
     return res.status(201).json({
       success: true,
       successCode: "SUCCESS_SESSION_CREATED",
@@ -227,48 +202,6 @@ export async function createOtpSession(req, res) {
       ],
       token: token                
     });
-
-=======
-    // Generate OTP and calculate expiration
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); 
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); 
-
-    // Save session/OTP data to the database
-    const createdSession = await Usermobile.create({
-      phone: phone, // Saves the transformed 10-digit number
-      game_id: game_id,
-      is_verified: 1, 
-      otp: otpCode,
-      otp_expires_at: expiresAt,
-      points: points,
-    });
-
-    // 6. Generate the JWT (Bearer Token)
-    const secretKey = process.env.JWT_SECRET || "temporary_development_secret_key";
-    
-    const tokenPayload = {
-      sessionId: createdSession.id,
-      phone: createdSession.phone,
-      game_id: createdSession.game_id
-    };
-
-    const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '5m' });
-
-    // 7. Return the success response
-    return res.status(201).json({
-      token: token,
-      success: true,
-      successCode: "SUCCESS_SESSION_CREATED",
-      data: [
-        {
-          game_id: createdSession.game_id,
-          points: createdSession.points,
-          phone: createdSession.phone
-        }
-      ]        
-    });
-
->>>>>>> 5d2b32343389eb6bb0a81dc4e362816a68cde237
   } catch (error) {
     console.error("Error saving OTP session:", error);
 
