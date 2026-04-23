@@ -8,6 +8,14 @@ function normalizeOrigin(origin) {
   return origin.replace(/\/+$/, "");
 }
 
+function normalizeUrl(value) {
+  if (!value || typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim().replace(/\/+$/, "");
+}
+
 function readCommaSeparatedOrigins(rawValue) {
   if (!rawValue || typeof rawValue !== "string") {
     return [];
@@ -43,4 +51,9 @@ export const env = {
   },
   seedAdminUsername: process.env.SEED_ADMIN_USERNAME || "admin",
   seedAdminPassword: process.env.SEED_ADMIN_PASSWORD || "changeme",
+  gcs: {
+    bucketName: process.env.GCS_BUCKET_NAME || "",
+    projectId: process.env.GCS_PROJECT_ID || "",
+    publicBaseUrl: normalizeUrl(process.env.GCS_PUBLIC_BASE_URL),
+  },
 };

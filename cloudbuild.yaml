@@ -6,6 +6,9 @@ substitutions:
   _SERVICE_NAME: docking
   _REGION: asia-east1
   _CORS_ORIGINS: https://docking-frontend-635955947416.asia-east1.run.app
+  _GCS_BUCKET_NAME: ""
+  _GCS_PROJECT_ID: "$PROJECT_ID"
+  _GCS_PUBLIC_BASE_URL: ""
   # Example: asia-east1-docker.pkg.dev/$PROJECT_ID/REPO/IMAGE:tag
   _AR_REPOSITORY: cloud-run-source-deploy
   _CLOUDSQL_INSTANCES: utility-grin-487808-f7:asia-east1:minigames-db
@@ -40,7 +43,7 @@ steps:
       - "--platform=managed"
       - "--quiet"
       - "--add-cloudsql-instances=${_CLOUDSQL_INSTANCES}"
-      - "--set-env-vars=CORS_ORIGINS=${_CORS_ORIGINS}"
+      - "--set-env-vars=CORS_ORIGINS=${_CORS_ORIGINS},GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},GCS_PROJECT_ID=${_GCS_PROJECT_ID},GCS_PUBLIC_BASE_URL=${_GCS_PUBLIC_BASE_URL}"
 
 images:
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/${_SERVICE_NAME}:$COMMIT_SHA"
