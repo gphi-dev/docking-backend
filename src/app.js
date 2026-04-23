@@ -3,12 +3,11 @@ import cors from "cors";
 import path from "node:path";
 import { env } from "./config/env.js";
 import { authRouter } from "./routes/auth.routes.js";
-// import authRouter from "./routes/auth.routes.js";
 import { gamesRouter } from "./routes/games.routes.js";
 import { listGames } from "./controllers/games.controller.js";
 import { subscribersRouter } from "./routes/subscribers.routes.js";
 import { adminsRouter } from "./routes/admins.routes.js";
-import { usermobileRouter } from "./routes/usermobile.routes.js"; // Adjust path if needed
+import { usermobileRouter } from "./routes/usermobile.routes.js";
 import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
 
@@ -18,7 +17,6 @@ export function createApp() {
   app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-    // res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
     if (req.method === "OPTIONS") {
