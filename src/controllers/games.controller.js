@@ -1,6 +1,7 @@
 import { QueryTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 import { Game } from "../models/index.js";
+import { resolveGameImageUrl } from "../utils/gameImageStorage.js";
 
 async function hasGamesTableColumn(columnName) {
   const tableDefinition = await sequelize.getQueryInterface().describeTable("games");
@@ -152,7 +153,7 @@ export async function createGame(req, res) {
   const game_id = Number(req.body?.game_id);
   const gamesecretkey = req.body?.game_secret_key;
   const description = req.body?.description ?? null;
-  const imageUrl = req.body?.image_url ?? null;
+  const imageUrl = await resolveGameImageUrl(req.body?.image_url ?? null);
 
   if (!name || typeof name !== "string") {
     return res.status(400).json({ message: "name is required" });
@@ -189,7 +190,7 @@ export async function updateGame(req, res) {
   const nextGameId = req.body?.game_id !== undefined ? Number(req.body.game_id) : undefined;
   const nextGameSecretKey = req.body?.gamesecretkey;
   const nextDescription = req.body?.description;
-  const nextImageUrl = req.body?.image_url;
+  const nextImageUrl = await resolveGameImageUrl(req.body?.image_url);
 
   if (nextName !== undefined) {
     if (!nextName || typeof nextName !== "string") {

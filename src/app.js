@@ -1,13 +1,16 @@
 import express from "express";
 import cors from "cors";
+import path from "node:path";
 import { env } from "./config/env.js";
 import { authRouter } from "./routes/auth.routes.js";
 // import authRouter from "./routes/auth.routes.js";
 import { gamesRouter } from "./routes/games.routes.js";
+import { listGames } from "./controllers/games.controller.js";
 import { subscribersRouter } from "./routes/subscribers.routes.js";
 import { adminsRouter } from "./routes/admins.routes.js";
 import { usermobileRouter } from "./routes/usermobile.routes.js"; // Adjust path if needed
 import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
+import { asyncHandler } from "./utils/asyncHandler.js";
 
 export function createApp() {
   const app = express();
@@ -48,12 +51,14 @@ export function createApp() {
   }
 
   app.use(express.json({ limit: "1mb" }));
+  app.use("/uploads", express.static(path.resolve(process.cwd(), "public/uploads")));
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
 
   app.use("/api/auth", authRouter);
+  app.get("/api/games", asyncHandler(listGames));
 
   app.use("/api/games", authenticateAdminJwt, gamesRouter);
   app.use("/api/subscribers", authenticateAdminJwt, subscribersRouter);
