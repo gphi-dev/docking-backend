@@ -1,14 +1,16 @@
 import { QueryTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 import { Game } from "../models/index.js";
+import { resolveGameImageUrl } from "../utils/gameImageStorage.js";
 
 async function hasGamesTableColumn(columnName) {
   const tableDefinition = await sequelize.getQueryInterface().describeTable("games");
   return Object.prototype.hasOwnProperty.call(tableDefinition, columnName);
 }
 
-async function selectGamesWithOptionalGameId(whereClause = "", replacements = {}) {
+async function selectGamesWithOptionalGameId(whereClause = "", replacements = {}, options = {}) {
   const includesGameId = await hasGamesTableColumn("game_id");
+  const includeGameSecretKey = options.includeGameSecretKey === true;
   const selectedColumns = [
     "id",
     "slug",
@@ -22,6 +24,10 @@ async function selectGamesWithOptionalGameId(whereClause = "", replacements = {}
     selectedColumns.splice(1, 0, "game_id");
   }
 
+  if (includeGameSecretKey) {
+    selectedColumns.splice(selectedColumns.length - 1, 0, "gamesecretkey");
+  }
+
   const games = await sequelize.query(
     `SELECT ${selectedColumns.join(", ")} FROM games ${whereClause}`.trim(),
     {
@@ -33,6 +39,12 @@ async function selectGamesWithOptionalGameId(whereClause = "", replacements = {}
   return games.map((game) => ({
     ...game,
     game_id: game.game_id ?? null,
+    ...(includeGameSecretKey
+      ? {
+          gamesecretkey: game.gamesecretkey ?? null,
+          game_secret_key: game.gamesecretkey ?? null,
+        }
+      : {}),
   }));
 }
 
@@ -47,7 +59,11 @@ export async function getGameById(req, res) {
     return res.status(400).json({ message: "Invalid game id" });
   }
 
-  const [game] = await selectGamesWithOptionalGameId("WHERE id = :gameId LIMIT 1", { gameId });
+  const [game] = await selectGamesWithOptionalGameId(
+    "WHERE id = :gameId LIMIT 1",
+    { gameId },
+    { includeGameSecretKey: true },
+  );
   if (!game) {
     return res.status(404).json({ message: "Game not found" });
   }
@@ -70,14 +86,22 @@ export async function getGameByIdentifier(req, res) {
   // Try to parse as numeric ID first
   const numericId = Number(identifier);
   if (Number.isFinite(numericId)) {
-    const [game] = await selectGamesWithOptionalGameId("WHERE id = :id LIMIT 1", { id: numericId });
+    const [game] = await selectGamesWithOptionalGameId(
+      "WHERE id = :id LIMIT 1",
+      { id: numericId },
+      { includeGameSecretKey: true },
+    );
     if (game) {
       return res.json(game);
     }
   }
 
   // Try as slug
-  const [game] = await selectGamesWithOptionalGameId("WHERE slug = :slug LIMIT 1", { slug: identifier });
+  const [game] = await selectGamesWithOptionalGameId(
+    "WHERE slug = :slug LIMIT 1",
+    { slug: identifier },
+    { includeGameSecretKey: true },
+  );
   if (game) {
     return res.json(game);
   }
@@ -98,7 +122,11 @@ export async function getGameBySlug(req, res) {
     return res.status(400).json({ message: "Invalid slug" });
   }
 
-  const [game] = await selectGamesWithOptionalGameId("WHERE slug = :slug LIMIT 1", { slug });
+  const [game] = await selectGamesWithOptionalGameId(
+    "WHERE slug = :slug LIMIT 1",
+    { slug },
+    { includeGameSecretKey: true },
+  );
   if (!game) {
     return res.status(404).json({ message: "Game not found" });
   }
@@ -152,7 +180,7 @@ export async function createGame(req, res) {
   const game_id = Number(req.body?.game_id);
   const gamesecretkey = req.body?.game_secret_key;
   const description = req.body?.description ?? null;
-  const imageUrl = req.body?.image_url ?? null;
+  const imageUrl = await resolveGameImageUrl(req.body?.image_url ?? null);
 
   if (!name || typeof name !== "string") {
     return res.status(400).json({ message: "name is required" });
@@ -189,7 +217,7 @@ export async function updateGame(req, res) {
   const nextGameId = req.body?.game_id !== undefined ? Number(req.body.game_id) : undefined;
   const nextGameSecretKey = req.body?.gamesecretkey;
   const nextDescription = req.body?.description;
-  const nextImageUrl = req.body?.image_url;
+  const nextImageUrl = await resolveGameImageUrl(req.body?.image_url);
 
   if (nextName !== undefined) {
     if (!nextName || typeof nextName !== "string") {
