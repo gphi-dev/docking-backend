@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { env } from "./config/env.js";
 import { authRouter } from "./routes/auth.routes.js";
@@ -10,6 +11,9 @@ import { adminsRouter } from "./routes/admins.routes.js";
 import { usermobileRouter } from "./routes/usermobile.routes.js";
 import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
+
+const sourceDirectory = path.dirname(fileURLToPath(import.meta.url));
+const publicUploadsDirectory = path.resolve(sourceDirectory, "../public/uploads");
 
 export function createApp() {
   const app = express();
@@ -49,7 +53,7 @@ export function createApp() {
   }
 
   app.use(express.json({ limit: "1mb" }));
-  app.use("/uploads", express.static(path.resolve(process.cwd(), "public/uploads")));
+  app.use("/uploads", express.static(publicUploadsDirectory));
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });

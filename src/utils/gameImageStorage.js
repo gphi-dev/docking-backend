@@ -1,8 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-const uploadsDirectory = path.resolve(process.cwd(), "public/uploads/games");
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+const uploadsDirectory = path.resolve(currentDirectory, "../../public/uploads/games");
 const publicPathPrefix = "/uploads/games";
 
 const mimeTypeToExtension = {
