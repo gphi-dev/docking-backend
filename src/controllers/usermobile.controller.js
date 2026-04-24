@@ -126,11 +126,8 @@ export async function getUsersMaskedScoreList(_req, res) {
 }
 
 export async function getUsersMaskedScoreListByGame(req, res) {
-  const gameId = String(
-    req.body?.game_id ??
-      req.body?.gameId ??
-      req.query?.game_id ??
-      req.query?.gameId ??
+    const gameId = String(
+      req.body?.game_id ??
       "",
   ).trim();
 
