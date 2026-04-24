@@ -13,6 +13,7 @@ export const usermobileRouter = Router();
 
 usermobileRouter.get("/", asyncHandler(listUsermobile));
 usermobileRouter.get("/masked/scorelist", asyncHandler(getUsersMaskedScoreList));
+usermobileRouter.get("/masked/topscorer", asyncHandler(getUsersMaskedScoreListByGame));
 usermobileRouter.post("/masked/topscorer", asyncHandler(getUsersMaskedScoreListByGame));
 usermobileRouter.get("/games/:gameId", asyncHandler(getUsermobileSubscribedGame));
 usermobileRouter.get("/:phone", asyncHandler(getUsermobileByPhone));
