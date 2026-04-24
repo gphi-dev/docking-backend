@@ -1,191 +1,155 @@
-import { Usermobile, Game } from "../models/index.js";
+import { Usermobile } from "../models/usermobile.model.js";
 
-const DEFAULT_USERMOBILE_PAGE_SIZE = 20;
-const MAX_USERMOBILE_PAGE_SIZE = 100;
-
-/**
- * @utility maskPhoneNumber
- * @description Masks a 10-digit phone number to format: XXX-****-XXX
- * Replaces digits 4-7 with asterisks
- * @param {string} phone - 10-digit phone number (e.g., '9271234345')
- * @returns {string} Masked phone number (e.g., '927-****-345')
- */
 function maskPhoneNumber(phone) {
-  if (!phone || phone.length !== 10 || !/^\d+$/.test(phone)) {
-    return phone;
+  const rawPhone = String(phone ?? "").trim();
+
+  if (!rawPhone) {
+    return rawPhone;
   }
-  return `${phone.substring(0, 3)}-****-${phone.substring(7, 10)}`;
+
+  if (/^\d{10}$/.test(rawPhone)) {
+    return `${rawPhone.substring(0, 3)}-****-${rawPhone.substring(7, 10)}`;
+  }
+
+  if (rawPhone.length <= 4) {
+    return rawPhone;
+  }
+
+  return `${rawPhone.slice(0, 3)}${"*".repeat(Math.max(rawPhone.length - 5, 1))}${rawPhone.slice(-2)}`;
 }
 
-function parsePositiveInteger(rawValue, fallbackValue) {
-  const parsedValue = Number.parseInt(String(rawValue ?? ""), 10);
-  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
-    return fallbackValue;
-  }
-  return parsedValue;
+function sanitizeUsermobile(usermobile) {
+  const usermobileData = usermobile.get({ plain: true });
+  delete usermobileData.otp;
+  delete usermobileData.otp_expires_at;
+  return usermobileData;
 }
 
-export async function listUsermobile(req, res) {
-  const requestedPage = parsePositiveInteger(req.query.page, 1);
-  const requestedPageSize = parsePositiveInteger(req.query.pageSize, DEFAULT_USERMOBILE_PAGE_SIZE);
-  const pageSize = Math.min(requestedPageSize, MAX_USERMOBILE_PAGE_SIZE);
-  const gameId = String(req.query.gameId ?? "").trim();
-  const where = gameId ? { game_id: gameId } : undefined;
+function parsePoints(rawValue) {
+  if (rawValue === undefined || rawValue === null || String(rawValue).trim() === "") {
+    return 0;
+  }
 
-  const totalCount = await Usermobile.count({ where });
-  const totalPages = totalCount === 0 ? 1 : Math.ceil(totalCount / pageSize);
-  const page = Math.min(requestedPage, totalPages);
-  const offset = (page - 1) * pageSize;
+  const points = Number.parseInt(String(rawValue), 10);
+  if (!Number.isFinite(points)) {
+    return null;
+  }
 
-  const usermobiles = await Usermobile.findAll({
-    where,
-    include: [
-      {
-        model: Game,
-        as: "game",
-        attributes: ["name"],
-        required: true, // INNER JOIN to match the SQL
-      },
-    ],
-    order: [["created_at", "DESC"]],
+  return points;
+}
+
+export async function listUsermobile(_req, res) {
+  const users = await Usermobile.findAll({
     attributes: { exclude: ["otp", "otp_expires_at"] },
-    limit: pageSize,
-    offset,
-  });
-
-  return res.json({
-    items: usermobiles,
-    total: totalCount,
-    page,
-    pageSize,
-    totalPages,
-  });
-}
-
-export async function getUsermobileSubscribedGame(req, res) {
-  const gameIdParam = req.params.gameId;
-
-  if (!gameIdParam) {
-    return res.status(400).json({ message: "Invalid game id" });
-  }
-
-  const usermobiles = await Usermobile.findAll({
-    where: { game_id: String(gameIdParam) },
     order: [["created_at", "DESC"]],
-    attributes: { exclude: ["otp", "otp_expires_at"] },
   });
 
-  return res.json(usermobiles);
+  return res.json(users);
 }
 
-// FIX: Renamed from 'getGameByPhone' to accurately reflect the data being returned.
 export async function getUsermobileByPhone(req, res) {
-  const phoneParam = req.params.phone;
-
-  if (!phoneParam) {
-    return res.status(400).json({ message: "Invalid phone number" });
+  const phone = String(req.params.phone ?? "").trim();
+  if (!phone) {
+    return res.status(400).json({ message: "phone is required" });
   }
 
-  const usermobile = await Usermobile.findOne({
-    where: { phone: phoneParam },
-    attributes: { exclude: ["otp", "otp_expires_at"] }
+  const user = await Usermobile.findOne({
+    where: { phone },
+    attributes: { exclude: ["otp", "otp_expires_at"] },
   });
 
-  if (!usermobile) {
-    return res.status(404).json({ message: "Usermobile not found" });
+  if (!user) {
+    return res.status(404).json({ message: "User mobile not found" });
   }
-  
-  return res.json(usermobile);
+
+  return res.json(user);
 }
 
 export async function createUsermobile(req, res) {
-  const { phone, game_id, points } = req.body;
+  const phone = String(req.body?.phone ?? "").trim();
+  const gameId = String(req.body?.game_id ?? "").trim();
+  const points = parsePoints(req.body?.points);
 
-  if (!phone || !game_id) {
-    return res.status(400).json({ message: "phone and game_id are required" });
+  if (!phone) {
+    return res.status(400).json({ message: "phone is required" });
   }
 
-  const newUsermobile = await Usermobile.create({
+  if (!gameId) {
+    return res.status(400).json({ message: "game_id is required" });
+  }
+
+  if (points === null) {
+    return res.status(400).json({ message: "points must be a valid integer" });
+  }
+
+  const createdUser = await Usermobile.create({
     phone,
-    game_id,
+    game_id: gameId,
+    is_verified: req.body?.is_verified ?? 0,
+    verified_at: req.body?.verified_at ?? null,
+    otp: req.body?.otp ?? null,
+    otp_expires_at: req.body?.otp_expires_at ?? null,
     points,
   });
 
-  // FIX: Using Sequelize's get() method for a cleaner, detached object payload
-  const responseData = newUsermobile.get({ plain: true });
-  delete responseData.otp;
-  delete responseData.otp_expires_at;
-
-  return res.status(201).json(responseData);
+  return res.status(201).json(sanitizeUsermobile(createdUser));
 }
 
-/**
- * @controller getUsersMaskedList
- * @description Retrieves all users from usersmobile table with masked phone numbers
- * @route GET /api/usermobile/masked
- * @access Public
- * @returns {Array} Array of objects with phone (masked), game_id, and points
- */
-export async function getUsersMaskedScoreList(req, res) {
-  try {
-    const users = await Usermobile.findAll({
-      attributes: ['phone', 'game_id', 'points'],
-      order: [['created_at', 'DESC']],
-    });
-
-    if (!users || users.length === 0) {
-      return res.status(200).json([]);
-    }
-
-    const maskedUsers = users.map(user => {
-      const userData = user.get({ plain: true });
-      return {
-        phone: maskPhoneNumber(userData.phone),
-        game_id: userData.game_id,
-        points: userData.points ?? 0,
-      };
-    });
-
-    return res.status(200).json(maskedUsers);
-  } catch (error) {
-    console.error('Error retrieving users:', error);
-    return res.status(500).json({ message: 'Internal server error' });
+export async function getUsermobileSubscribedGame(req, res) {
+  const gameId = String(req.params.gameId ?? "").trim();
+  if (!gameId) {
+    return res.status(400).json({ message: "gameId is required" });
   }
+
+  const users = await Usermobile.findAll({
+    where: { game_id: gameId },
+    attributes: { exclude: ["otp", "otp_expires_at"] },
+    order: [["created_at", "DESC"]],
+  });
+
+  return res.json(users);
 }
 
+export async function getUsersMaskedScoreList(_req, res) {
+  const users = await Usermobile.findAll({
+    attributes: ["phone", "game_id", "points"],
+    order: [["created_at", "DESC"]],
+  });
+
+  return res.json(
+    users.map((user) => ({
+      phone: maskPhoneNumber(user.phone),
+      game_id: user.game_id,
+      points: user.points ?? 0,
+    })),
+  );
+}
 
 export async function getUsersMaskedScoreListByGame(req, res) {
-  const game_id = req.body?.game_id ?? req.query?.game_id;
+  const gameId = String(
+    req.body?.game_id ??
+      req.body?.gameId ??
+      req.query?.game_id ??
+      req.query?.gameId ??
+      "",
+  ).trim();
 
-  if (game_id === undefined || game_id === null) {
+  if (!gameId) {
     return res.status(400).json({ message: "game_id is required" });
   }
 
-  const normalizedGameId = String(game_id).trim();
-  if (!normalizedGameId) {
-    return res.status(400).json({ message: "game_id is required" });
-  }
+  const users = await Usermobile.findAll({
+    where: { game_id: gameId },
+    attributes: ["phone", "game_id", "points"],
+    order: [["points", "DESC"], ["created_at", "ASC"]],
+    limit: 2,
+  });
 
-  try {
-    const users = await Usermobile.findAll({
-      where: { game_id: normalizedGameId },
-      attributes: ['phone', 'game_id', 'points'],
-      order: [['points', 'DESC'], ['created_at', 'ASC']],
-      limit: 2, // Limit to the top 2 results
-    });
-
-    const maskedUsers = users.map(user => {
-      const userData = user.get({ plain: true });
-      return {
-        phone: maskPhoneNumber(userData.phone),
-        game_id: userData.game_id,
-        points: userData.points ?? 0,
-      };
-    });
-
-    return res.status(200).json(maskedUsers);
-  } catch (error) {
-    console.error('Error retrieving masked users by game:', error);
-    return res.status(500).json({ message: 'Internal server error' });
-  }
+  return res.json(
+    users.map((user) => ({
+      phone: maskPhoneNumber(user.phone),
+      game_id: user.game_id,
+      points: user.points ?? 0,
+    })),
+  );
 }

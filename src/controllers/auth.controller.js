@@ -98,15 +98,13 @@ export const loginAdmin = asyncHandler(async (req, res) => {
  * @route POST /api/auth/game-login
  * @access Public
  */
-import { Usermobile } from "../models/usermobile.model.js";
 
+import { Usermobile } from "../models/usermobile.model.js";
 
 export async function createOtpSession(req, res) {
   let phone = req.body?.phone;
   const game_id = req.body?.game_id;
-  const points = req.body?.points ?? 0;
-
-  //Initial existence checks
+  // Initial existence checks
   if (!phone) {
     return res.status(400).json({ 
       success: false, 
@@ -147,7 +145,7 @@ export async function createOtpSession(req, res) {
     return res.status(400).json({ 
       success: false, 
       errorCode: "ERR_INVALID_PHONE_LENGTH", 
-      message: "Phone must be exactly 10 digits (excluding the leading zero)" 
+      message: "Phone must be exactly 10 digits (excluding the zero)" 
     });
   }
 
@@ -176,13 +174,13 @@ export async function createOtpSession(req, res) {
     const createdSession = await Usermobile.create({
       phone: phone, // Saves the transformed 10-digit number
       game_id: game_id,
-      is_verified: 1, 
+      is_verified: 0, 
+      verified_at: null,
       otp: otpCode,
       otp_expires_at: expiresAt,
-      points: points,
     });
 
-    // 6. Generate the JWT (Bearer Token)
+    // Generate the JWT (Bearer Token)
     const secretKey = process.env.JWT_SECRET || "temporary_development_secret_key";
     
     const tokenPayload = {
@@ -193,20 +191,17 @@ export async function createOtpSession(req, res) {
 
     const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '5m' });
 
-    // 7. Return the success response
+    // Return the success response
     return res.status(201).json({
-      token: token,
       success: true,
       successCode: "SUCCESS_SESSION_CREATED",
       data: [
         {
-          game_id: createdSession.game_id,
-          points: createdSession.points,
-          phone: createdSession.phone
+          game_id: createdSession.game_id
         }
-      ]        
+      ],
+      token: token                
     });
-
   } catch (error) {
     console.error("Error saving OTP session:", error);
 
