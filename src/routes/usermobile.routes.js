@@ -17,7 +17,8 @@ usermobileRouter.get("/", asyncHandler(listUsermobile));
 // GET /api/usermobile/masked/scorelist
 usermobileRouter.get("/masked/scorelist", asyncHandler(getUsersMaskedScoreList));
 
-// POST /api/usermobile//masked/topscorer
+// GET or POST /api/usermobile/masked/topscorer
+usermobileRouter.get("/masked/topscorer", asyncHandler(getUsersMaskedScoreListByGame));
 usermobileRouter.post("/masked/topscorer", asyncHandler(getUsersMaskedScoreListByGame));
 
 // GET /api/usermobile/games/:gameId 

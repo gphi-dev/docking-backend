@@ -142,7 +142,7 @@ export async function getUsersMaskedScoreList(req, res) {
       return {
         phone: maskPhoneNumber(userData.phone),
         game_id: userData.game_id,
-        points: userData.points,
+        points: userData.points ?? 0,
       };
     });
 
@@ -155,22 +155,22 @@ export async function getUsersMaskedScoreList(req, res) {
 
 
 export async function getUsersMaskedScoreListByGame(req, res) {
-  const { game_id } = req.body;
+  const game_id = req.body?.game_id ?? req.query?.game_id;
 
   if (game_id === undefined || game_id === null) {
     return res.status(400).json({ message: "game_id is required" });
   }
 
-  // Safety check: Ensure game_id is a numeric value and not a non-numeric string.
-  if (!/^\d+$/.test(String(game_id))) {
-    return res.status(400).json({ message: "game_id must be a numeric value." });
+  const normalizedGameId = String(game_id).trim();
+  if (!normalizedGameId) {
+    return res.status(400).json({ message: "game_id is required" });
   }
 
   try {
     const users = await Usermobile.findAll({
-      where: { game_id: String(game_id) },
+      where: { game_id: normalizedGameId },
       attributes: ['phone', 'game_id', 'points'],
-      order: [['created_at', 'DESC']],
+      order: [['points', 'DESC'], ['created_at', 'ASC']],
       limit: 2, // Limit to the top 2 results
     });
 
@@ -179,7 +179,7 @@ export async function getUsersMaskedScoreListByGame(req, res) {
       return {
         phone: maskPhoneNumber(userData.phone),
         game_id: userData.game_id,
-        points: userData.points,
+        points: userData.points ?? 0,
       };
     });
 

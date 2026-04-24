@@ -2,55 +2,45 @@ import { QueryTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 import { Game } from "../models/index.js";
 import { resolveGameImageUrl } from "../utils/gameImageStorage.js";
+import {
+  getGameDetailsById,
+  getGameDetailsByIdentifier,
+  getGameDetailsBySlug,
+  getGamesCatalog,
+} from "../services/games.service.js";
 
-async function hasGamesTableColumn(columnName) {
-  const tableDefinition = await sequelize.getQueryInterface().describeTable("games");
-  return Object.prototype.hasOwnProperty.call(tableDefinition, columnName);
-}
+const DEFAULT_GAME_SECTION_LIMIT = 10;
+const MAX_GAME_SECTION_LIMIT = 50;
 
-async function selectGamesWithOptionalGameId(whereClause = "", replacements = {}, options = {}) {
-  const includesGameId = await hasGamesTableColumn("game_id");
-  const includeGameSecretKey = options.includeGameSecretKey === true;
-  const selectedColumns = [
-    "id",
-    "slug",
-    "name",
-    "description",
-    "image_url",
-    "created_at",
-  ];
-
-  if (includesGameId) {
-    selectedColumns.splice(1, 0, "game_id");
+function parseGamesSectionLimit(rawValue, queryParamName) {
+  if (rawValue === undefined) {
+    return DEFAULT_GAME_SECTION_LIMIT;
   }
 
-  if (includeGameSecretKey) {
-    selectedColumns.splice(selectedColumns.length - 1, 0, "gamesecretkey");
+  const parsedValue = Number.parseInt(String(rawValue), 10);
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    const error = new Error(`${queryParamName} must be a positive integer`);
+    error.status = 400;
+    throw error;
   }
 
-  const games = await sequelize.query(
-    `SELECT ${selectedColumns.join(", ")} FROM games ${whereClause}`.trim(),
-    {
-      replacements,
-      type: QueryTypes.SELECT,
-    },
-  );
-
-  return games.map((game) => ({
-    ...game,
-    game_id: game.game_id ?? null,
-    ...(includeGameSecretKey
-      ? {
-          gamesecretkey: game.gamesecretkey ?? null,
-          game_secret_key: game.gamesecretkey ?? null,
-        }
-      : {}),
-  }));
+  return Math.min(parsedValue, MAX_GAME_SECTION_LIMIT);
 }
 
-export async function listGames(_req, res) {
-  const games = await selectGamesWithOptionalGameId("ORDER BY created_at DESC");
-  return res.json(games);
+function normalizeOptionalGameId(rawValue) {
+  if (rawValue === undefined || rawValue === null) {
+    return null;
+  }
+
+  const normalizedGameId = String(rawValue).trim();
+  return normalizedGameId || null;
+}
+
+export async function listGames(req, res) {
+  const featuredLimit = parseGamesSectionLimit(req.query.featured_limit, "featured_limit");
+  const newLimit = parseGamesSectionLimit(req.query.new_limit, "new_limit");
+  const payload = await getGamesCatalog({ featuredLimit, newLimit });
+  return res.json(payload);
 }
 
 export async function getGameById(req, res) {
@@ -59,11 +49,7 @@ export async function getGameById(req, res) {
     return res.status(400).json({ message: "Invalid game id" });
   }
 
-  const [game] = await selectGamesWithOptionalGameId(
-    "WHERE id = :gameId LIMIT 1",
-    { gameId },
-    { includeGameSecretKey: true },
-  );
+  const game = await getGameDetailsById(gameId);
   if (!game) {
     return res.status(404).json({ message: "Game not found" });
   }
@@ -83,25 +69,7 @@ export async function getGameByIdentifier(req, res) {
     return res.status(400).json({ message: "Invalid identifier" });
   }
 
-  // Try to parse as numeric ID first
-  const numericId = Number(identifier);
-  if (Number.isFinite(numericId)) {
-    const [game] = await selectGamesWithOptionalGameId(
-      "WHERE id = :id LIMIT 1",
-      { id: numericId },
-      { includeGameSecretKey: true },
-    );
-    if (game) {
-      return res.json(game);
-    }
-  }
-
-  // Try as slug
-  const [game] = await selectGamesWithOptionalGameId(
-    "WHERE slug = :slug LIMIT 1",
-    { slug: identifier },
-    { includeGameSecretKey: true },
-  );
+  const game = await getGameDetailsByIdentifier(identifier);
   if (game) {
     return res.json(game);
   }
@@ -122,11 +90,7 @@ export async function getGameBySlug(req, res) {
     return res.status(400).json({ message: "Invalid slug" });
   }
 
-  const [game] = await selectGamesWithOptionalGameId(
-    "WHERE slug = :slug LIMIT 1",
-    { slug },
-    { includeGameSecretKey: true },
-  );
+  const game = await getGameDetailsBySlug(slug);
   if (!game) {
     return res.status(404).json({ message: "Game not found" });
   }
@@ -177,8 +141,8 @@ async function generateUniqueSlug(name, currentGameId = null) {
 
 export async function createGame(req, res) {
   const name = req.body?.name;
-  const game_id = Number(req.body?.game_id);
-  const gamesecretkey = req.body?.game_secret_key;
+  const game_id = normalizeOptionalGameId(req.body?.game_id);
+  const gamesecretkey = req.body?.game_secret_key ?? req.body?.gamesecretkey;
   const description = req.body?.description ?? null;
   const imageUrl = await resolveGameImageUrl(req.body?.image_url ?? null);
 
@@ -214,8 +178,10 @@ export async function updateGame(req, res) {
   }
 
   const nextName = req.body?.name;
-  const nextGameId = req.body?.game_id !== undefined ? Number(req.body.game_id) : undefined;
-  const nextGameSecretKey = req.body?.gamesecretkey;
+  const nextGameId = req.body?.game_id !== undefined
+    ? normalizeOptionalGameId(req.body.game_id)
+    : undefined;
+  const nextGameSecretKey = req.body?.game_secret_key ?? req.body?.gamesecretkey;
   const nextDescription = req.body?.description;
   const nextImageUrl = await resolveGameImageUrl(req.body?.image_url);
 
@@ -229,9 +195,6 @@ export async function updateGame(req, res) {
     }
   }
   if (nextGameId !== undefined) {
-    if (!Number.isFinite(nextGameId)) {
-      return res.status(400).json({ message: "game_id must be a valid integer" });
-    }
     game.game_id = nextGameId;
   }
   if (nextGameSecretKey !== undefined) {
