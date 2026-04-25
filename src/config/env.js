@@ -2,6 +2,20 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const defaultProductionCorsOrigins = ["https://docking-frontend-635955947416.asia-east1.run.app"];
+
+function normalizeOrigin(origin) {
+  return origin.replace(/\/+$/, "");
+}
+
+function normalizeUrl(value) {
+  if (!value || typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim().replace(/\/+$/, "");
+}
+
 function readCommaSeparatedOrigins(rawValue) {
   if (!rawValue || typeof rawValue !== "string") {
     return [];
@@ -9,6 +23,7 @@ function readCommaSeparatedOrigins(rawValue) {
   return rawValue
     .split(",")
     .map((origin) => origin.trim())
+    .map((origin) => normalizeOrigin(origin))
     .filter(Boolean);
 }
 
@@ -18,13 +33,17 @@ export const env = {
   jwtSecret: process.env.JWT_SECRET || "dev-only-change-me",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "8h",
   corsOrigins: readCommaSeparatedOrigins(process.env.CORS_ORIGINS),
+  defaultProductionCorsOrigins,
   database: {
-    name: process.env.DB_NAME || "docking_admin",
-    user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "",
-    host: process.env.DB_HOST || "127.0.0.1",
+    name: process.env.DB_NAME || "main",
+    user: process.env.DB_USER || "dev",
+    password: process.env.DB_PASSWORD || "3zqknH$$.^rjCFTP",
+    host: process.env.DB_HOST || "136.110.11.139",
     port: Number(process.env.DB_PORT || 3306),
-    socketPath: process.env.DB_SOCKET_PATH?.trim() || null,
+
+    // IMPORTANT: Change this back to null for local development
+    socketPath: process.env.DB_SOCKET_PATH || null,
+
     poolMax: Number(process.env.DB_POOL_MAX || 5),
     poolMin: Number(process.env.DB_POOL_MIN || 0),
     poolAcquireMs: Number(process.env.DB_POOL_ACQUIRE_MS || 30000),
@@ -32,4 +51,10 @@ export const env = {
   },
   seedAdminUsername: process.env.SEED_ADMIN_USERNAME || "admin",
   seedAdminPassword: process.env.SEED_ADMIN_PASSWORD || "changeme",
+  localUploadsDirectory: normalizeUrl(process.env.LOCAL_UPLOADS_DIR),
+  gcs: {
+    bucketName: process.env.GCS_BUCKET_NAME || "",
+    projectId: process.env.GCS_PROJECT_ID || "",
+    publicBaseUrl: normalizeUrl(process.env.GCS_PUBLIC_BASE_URL),
+  },
 };

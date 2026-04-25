@@ -2,54 +2,67 @@ import express from "express";
 import cors from "cors";
 import { env } from "./config/env.js";
 import { authRouter } from "./routes/auth.routes.js";
-// import authRouter from "./routes/auth.routes.js";
 import { gamesRouter } from "./routes/games.routes.js";
+import { listGames } from "./controllers/games.controller.js";
 import { subscribersRouter } from "./routes/subscribers.routes.js";
 import { adminsRouter } from "./routes/admins.routes.js";
+import { usermobileRouter } from "./routes/usermobile.routes.js";
 import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
+import { asyncHandler } from "./utils/asyncHandler.js";
+import { localUploadsDirectory } from "./utils/gameImageStorage.js";
 
-/**
- * @param {object} [options]
- * @param {() => boolean} [options.isDatabaseReady] When set, non-health routes return 503 until true (listen-before-DB startup).
- */
-export function createApp(options = {}) {
-  const { isDatabaseReady } = options;
+export function createApp() {
   const app = express();
 
-  const corsOptions =
+  app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(204);
+    }
+
+    return next();
+  });
+
+  const allowedOrigins =
     env.corsOrigins.length > 0
-      ? { origin: env.corsOrigins }
+      ? env.corsOrigins
       : env.nodeEnv === "development"
-        ? { origin: "http://localhost:5173" }
-        : false;
+        ? ["http://localhost:5173"]
+        : env.defaultProductionCorsOrigins;
+
+  const corsOptions =
+    allowedOrigins.length > 0
+      ? {
+          origin: allowedOrigins,
+          methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+          allowedHeaders: ["Content-Type", "Authorization"],
+          optionsSuccessStatus: 204,
+        }
+      : false;
 
   if (corsOptions) {
     app.use(cors(corsOptions));
+    app.options("*", cors(corsOptions));
   }
 
   app.use(express.json({ limit: "1mb" }));
-
-  if (typeof isDatabaseReady === "function") {
-    app.use((req, res, next) => {
-      if (req.path === "/health") {
-        return next();
-      }
-      if (!isDatabaseReady()) {
-        return res.status(503).json({ message: "Database not ready" });
-      }
-      return next();
-    });
-  }
+  app.use("/uploads", express.static(localUploadsDirectory));
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
 
   app.use("/api/auth", authRouter);
+  app.get("/api/games", asyncHandler(listGames));
 
   app.use("/api/games", authenticateAdminJwt, gamesRouter);
   app.use("/api/subscribers", authenticateAdminJwt, subscribersRouter);
   app.use("/api/admins", authenticateAdminJwt, adminsRouter);
+
+  app.use("/api/usermobile", usermobileRouter);
 
   app.use((req, res) => {
     res.status(404).json({ message: `Route not found: ${req.method} ${req.path}` });

@@ -2,30 +2,73 @@ import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { sequelize, verifyDatabaseConnection } from "./config/database.js";
 
+function formatServerListenError(error) {
+  if (error?.code === "EADDRINUSE") {
+    return new Error(`Port ${env.port} is already in use.`);
+  }
+
+  if (error?.code === "EACCES") {
+    return new Error(`Port ${env.port} requires elevated privileges.`);
+  }
+
+  return error;
+}
+
+async function closeSequelizeConnection() {
+  try {
+    await sequelize.close();
+  } catch (error) {
+    console.error("Error closing Sequelize:", error);
+  }
+}
+
+async function waitForServerToListen(server) {
+  return new Promise((resolve, reject) => {
+    const handleListening = () => {
+      cleanup();
+      resolve();
+    };
+
+    const handleError = async (error) => {
+      cleanup();
+      await closeSequelizeConnection();
+      reject(formatServerListenError(error));
+    };
+
+    const cleanup = () => {
+      server.off("listening", handleListening);
+      server.off("error", handleError);
+    };
+
+    server.once("listening", handleListening);
+    server.once("error", handleError);
+  });
+}
+
 async function startHttpServer() {
-  let databaseReady = false;
-  const app = createApp({
-    isDatabaseReady: () => databaseReady,
-  });
-
-  const server = app.listen(env.port, "0.0.0.0", () => {
-    console.log(`API listening on 0.0.0.0:${env.port} (${env.nodeEnv})`);
-  });
-
   await verifyDatabaseConnection();
+<<<<<<< HEAD
   databaseReady = true;
   console.log("Database connection verified");
   
+=======
+
+  const app = createApp();
+  const server = app.listen(env.port);
+  await waitForServerToListen(server);
+  server.on("error", (error) => {
+    console.error("HTTP server error:", formatServerListenError(error));
+  });
+
+  console.log(`API listening on port ${env.port} (${env.nodeEnv})`);
+
+>>>>>>> origin/main
   const shutdownSignals = ["SIGINT", "SIGTERM"];
   shutdownSignals.forEach((signalName) => {
     process.on(signalName, async () => {
       console.log(`Received ${signalName}, shutting down...`);
       server.close(async () => {
-        try {
-          await sequelize.close();
-        } catch (error) {
-          console.error("Error closing Sequelize:", error);
-        }
+        await closeSequelizeConnection();
         process.exit(0);
       });
     });
