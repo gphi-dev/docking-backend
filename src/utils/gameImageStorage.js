@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -60,6 +61,39 @@ function buildGcsPublicUrl(filePath) {
   return `${baseUrl}/${encodePathSegments(filePath)}`;
 }
 
+function isAbsoluteUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+async function ensureLocalUploadExists(imagePath) {
+  const normalizedImagePath = imagePath.replace(/^\/+/, "");
+  const expectedPrefix = "uploads/games/";
+
+  if (!normalizedImagePath.startsWith(expectedPrefix)) {
+    const error = new Error("image_url must be an absolute URL, a data URL, or an existing /uploads/games path");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const fileName = path.basename(normalizedImagePath);
+  const filePath = path.join(gamesUploadsDirectory, fileName);
+
+  try {
+    await access(filePath, constants.R_OK);
+  } catch {
+    const error = new Error(`Image file not found: /uploads/games/${fileName}`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return `${publicPathPrefix}/${fileName}`;
+}
+
 async function uploadImageToGcs(decodedImage) {
   const { Storage } = await import("@google-cloud/storage");
   const storage = env.gcs.projectId
@@ -111,7 +145,11 @@ export async function resolveGameImageUrl(imageValue) {
   const decodedImage = decodeImageDataUrl(trimmedImageValue);
 
   if (!decodedImage) {
-    return trimmedImageValue;
+    if (isAbsoluteUrl(trimmedImageValue)) {
+      return trimmedImageValue;
+    }
+
+    return ensureLocalUploadExists(trimmedImageValue);
   }
 
   if (env.gcs.bucketName) {
