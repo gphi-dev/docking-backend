@@ -5,7 +5,10 @@ import { randomUUID } from "node:crypto";
 import { env } from "../config/env.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
-const uploadsDirectory = path.resolve(currentDirectory, "../../public/uploads/games");
+export const localUploadsDirectory = env.localUploadsDirectory
+  ? path.resolve(env.localUploadsDirectory)
+  : path.resolve(currentDirectory, "../../public/uploads");
+const gamesUploadsDirectory = path.join(localUploadsDirectory, "games");
 const publicPathPrefix = "/uploads/games";
 const gcsPublicHost = "https://storage.googleapis.com";
 
@@ -79,10 +82,10 @@ async function uploadImageToGcs(decodedImage) {
 }
 
 async function saveImageLocally(decodedImage) {
-  await mkdir(uploadsDirectory, { recursive: true });
+  await mkdir(gamesUploadsDirectory, { recursive: true });
 
   const fileName = `${Date.now()}-${randomUUID()}.${decodedImage.fileExtension}`;
-  const filePath = path.join(uploadsDirectory, fileName);
+  const filePath = path.join(gamesUploadsDirectory, fileName);
 
   await writeFile(filePath, decodedImage.buffer);
 

@@ -51,6 +51,7 @@ export const env = {
   },
   seedAdminUsername: process.env.SEED_ADMIN_USERNAME || "admin",
   seedAdminPassword: process.env.SEED_ADMIN_PASSWORD || "changeme",
+  localUploadsDirectory: normalizeUrl(process.env.LOCAL_UPLOADS_DIR),
   gcs: {
     bucketName: process.env.GCS_BUCKET_NAME || "",
     projectId: process.env.GCS_PROJECT_ID || "",
