@@ -3,7 +3,9 @@ import { constants } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { env } from "../config/env.js";
+import { s3Client } from "../config/s3.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 export const localUploadsDirectory = env.localUploadsDirectory
@@ -12,6 +14,8 @@ export const localUploadsDirectory = env.localUploadsDirectory
 const gamesUploadsDirectory = path.join(localUploadsDirectory, "games");
 const publicPathPrefix = "/uploads/games";
 const gcsPublicHost = "https://storage.googleapis.com";
+const s3ImagePathPrefix = "images";
+const immutableImageCacheControl = "public, max-age=31536000, immutable";
 
 const mimeTypeToExtension = {
   "image/jpeg": "jpg",
@@ -61,6 +65,12 @@ function buildGcsPublicUrl(filePath) {
   return `${baseUrl}/${encodePathSegments(filePath)}`;
 }
 
+function buildS3PublicUrl(filePath) {
+  const baseUrl =
+    env.aws.s3PublicUrl || `https://${env.aws.s3Bucket}.s3.${env.aws.region}.amazonaws.com`;
+  return `${baseUrl}/${encodePathSegments(filePath)}`;
+}
+
 function isAbsoluteUrl(value) {
   try {
     const url = new URL(value);
@@ -107,12 +117,29 @@ async function uploadImageToGcs(decodedImage) {
   await bucket.file(filePath).save(decodedImage.buffer, {
     metadata: {
       contentType: decodedImage.mimeType,
-      cacheControl: "public, max-age=31536000, immutable",
+      cacheControl: immutableImageCacheControl,
     },
     resumable: false,
   });
 
   return buildGcsPublicUrl(filePath);
+}
+
+async function uploadImageToS3(decodedImage) {
+  const fileName = `${Date.now()}-${randomUUID()}.${decodedImage.fileExtension}`;
+  const filePath = `${s3ImagePathPrefix}/${fileName}`;
+
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: env.aws.s3Bucket,
+      Key: filePath,
+      Body: decodedImage.buffer,
+      ContentType: decodedImage.mimeType,
+      CacheControl: immutableImageCacheControl,
+    }),
+  );
+
+  return buildS3PublicUrl(filePath);
 }
 
 async function saveImageLocally(decodedImage) {
@@ -150,6 +177,10 @@ export async function resolveGameImageUrl(imageValue) {
     }
 
     return ensureLocalUploadExists(trimmedImageValue);
+  }
+
+  if (env.aws.s3Bucket) {
+    return uploadImageToS3(decodedImage);
   }
 
   if (env.gcs.bucketName) {
