@@ -33,3 +33,12 @@ POST ${VITE_API_BASE_URL}/api/auth/login
 ```
 
 This repository's Cloud Build deployment now sets `CORS_ORIGINS` for the frontend origin so cross-origin requests from the deployed frontend are allowed.
+
+## Production game image uploads
+
+Cloud Run containers have an ephemeral filesystem. Local uploads under `/uploads/games`
+can work after deployment, but files can disappear when instances restart or scale.
+
+For durable production image uploads, set `GCS_BUCKET_NAME` in the Cloud Build trigger
+substitutions so the backend stores game images in Google Cloud Storage instead of the
+container filesystem.
