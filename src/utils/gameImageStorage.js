@@ -1,56 +1,28 @@
-import { access, mkdir, writeFile } from "node:fs/promises";
-import { constants } from "node:fs";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { env } from "../config/env.js";
 import { s3Client } from "../config/s3.js";
 
-const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
-export const localUploadsDirectory = env.localUploadsDirectory
-  ? path.resolve(env.localUploadsDirectory)
-  : path.resolve(currentDirectory, "../../public/uploads");
-const gamesUploadsDirectory = path.join(localUploadsDirectory, "games");
-const publicPathPrefix = "/uploads/games";
-const gcsPublicHost = "https://storage.googleapis.com";
 const s3ImagePathPrefix = "images";
 const immutableImageCacheControl = "public, max-age=31536000, immutable";
+const dataImageUrlPattern = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/;
 
-const mimeTypeToExtension = {
+const mimeTypeToExtension = Object.freeze({
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/gif": "gif",
   "image/webp": "webp",
   "image/svg+xml": "svg",
-};
+});
 
-function decodeImageDataUrl(imageValue) {
-  if (typeof imageValue !== "string" || !imageValue.startsWith("data:image/")) {
-    return null;
-  }
+function createBadRequestError(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+}
 
-  const matches = imageValue.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
-  if (!matches) {
-    const error = new Error("Invalid image data URL");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const [, mimeType, encodedData] = matches;
-  const fileExtension = mimeTypeToExtension[mimeType];
-
-  if (!fileExtension) {
-    const error = new Error("Unsupported image type");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  return {
-    fileExtension,
-    mimeType,
-    buffer: Buffer.from(encodedData, "base64"),
-  };
+function buildImageFileName(fileExtension) {
+  return `${Date.now()}-${randomUUID()}.${fileExtension}`;
 }
 
 function encodePathSegments(filePath) {
@@ -58,11 +30,6 @@ function encodePathSegments(filePath) {
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
-}
-
-function buildGcsPublicUrl(filePath) {
-  const baseUrl = env.gcs.publicBaseUrl || `${gcsPublicHost}/${env.gcs.bucketName}`;
-  return `${baseUrl}/${encodePathSegments(filePath)}`;
 }
 
 function buildS3PublicUrl(filePath) {
@@ -80,53 +47,36 @@ function isAbsoluteUrl(value) {
   }
 }
 
-async function ensureLocalUploadExists(imagePath) {
-  const normalizedImagePath = imagePath.replace(/^\/+/, "");
-  const expectedPrefix = "uploads/games/";
-
-  if (!normalizedImagePath.startsWith(expectedPrefix)) {
-    const error = new Error("image_url must be an absolute URL, a data URL, or an existing /uploads/games path");
-    error.statusCode = 400;
-    throw error;
+function decodeImageDataUrl(imageValue) {
+  if (typeof imageValue !== "string" || !imageValue.startsWith("data:image/")) {
+    return null;
   }
 
-  const fileName = path.basename(normalizedImagePath);
-  const filePath = path.join(gamesUploadsDirectory, fileName);
-
-  try {
-    await access(filePath, constants.R_OK);
-  } catch {
-    const error = new Error(`Image file not found: /uploads/games/${fileName}`);
-    error.statusCode = 400;
-    throw error;
+  const matches = imageValue.match(dataImageUrlPattern);
+  if (!matches) {
+    throw createBadRequestError("Invalid image data URL");
   }
 
-  return `${publicPathPrefix}/${fileName}`;
-}
+  const [, mimeType, encodedData] = matches;
+  const fileExtension = mimeTypeToExtension[mimeType];
 
-async function uploadImageToGcs(decodedImage) {
-  const { Storage } = await import("@google-cloud/storage");
-  const storage = env.gcs.projectId
-    ? new Storage({ projectId: env.gcs.projectId })
-    : new Storage();
+  if (!fileExtension) {
+    throw createBadRequestError("Unsupported image type");
+  }
 
-  const bucket = storage.bucket(env.gcs.bucketName);
-  const fileName = `${Date.now()}-${randomUUID()}.${decodedImage.fileExtension}`;
-  const filePath = `games/${fileName}`;
-
-  await bucket.file(filePath).save(decodedImage.buffer, {
-    metadata: {
-      contentType: decodedImage.mimeType,
-      cacheControl: immutableImageCacheControl,
-    },
-    resumable: false,
-  });
-
-  return buildGcsPublicUrl(filePath);
+  return {
+    fileExtension,
+    mimeType,
+    buffer: Buffer.from(encodedData, "base64"),
+  };
 }
 
 async function uploadImageToS3(decodedImage) {
-  const fileName = `${Date.now()}-${randomUUID()}.${decodedImage.fileExtension}`;
+  if (!env.aws.s3Bucket) {
+    throw createBadRequestError("AWS_S3_BUCKET is required for image uploads");
+  }
+
+  const fileName = buildImageFileName(decodedImage.fileExtension);
   const filePath = `${s3ImagePathPrefix}/${fileName}`;
 
   await s3Client.send(
@@ -142,17 +92,39 @@ async function uploadImageToS3(decodedImage) {
   return buildS3PublicUrl(filePath);
 }
 
-async function saveImageLocally(decodedImage) {
-  await mkdir(gamesUploadsDirectory, { recursive: true });
+export function resolveStoredGameImageUrl(imageValue) {
+  if (!imageValue || typeof imageValue !== "string") {
+    return imageValue ?? null;
+  }
 
-  const fileName = `${Date.now()}-${randomUUID()}.${decodedImage.fileExtension}`;
-  const filePath = path.join(gamesUploadsDirectory, fileName);
+  const trimmedImageValue = imageValue.trim();
+  if (!trimmedImageValue) {
+    return null;
+  }
 
-  await writeFile(filePath, decodedImage.buffer);
+  if (isAbsoluteUrl(trimmedImageValue)) {
+    return trimmedImageValue;
+  }
 
-  return `${publicPathPrefix}/${fileName}`;
+  const legacyUploadPrefix = "uploads/games/";
+  const normalizedImagePath = trimmedImageValue.replace(/^\/+/, "");
+  if (!normalizedImagePath.startsWith(legacyUploadPrefix) || !env.aws.s3Bucket) {
+    return trimmedImageValue;
+  }
+
+  const fileName = normalizedImagePath.slice(legacyUploadPrefix.length);
+  return buildS3PublicUrl(`${s3ImagePathPrefix}/${fileName}`);
 }
 
+/**
+ * Resolves the image value sent by game create/update payloads.
+ *
+ * Accepted values:
+ * - undefined: leave the current image unchanged
+ * - null or empty string: clear the image
+ * - absolute http(s) URL: store the external URL as-is
+ * - data:image/...;base64,...: upload to S3 and return its public URL
+ */
 export async function resolveGameImageUrl(imageValue) {
   if (imageValue === undefined) {
     return undefined;
@@ -163,29 +135,22 @@ export async function resolveGameImageUrl(imageValue) {
   }
 
   if (typeof imageValue !== "string") {
-    const error = new Error("image_url must be a string");
-    error.statusCode = 400;
-    throw error;
+    throw createBadRequestError("image_url must be a string");
   }
 
   const trimmedImageValue = imageValue.trim();
+  if (!trimmedImageValue) {
+    return null;
+  }
+
+  if (isAbsoluteUrl(trimmedImageValue)) {
+    return trimmedImageValue;
+  }
+
   const decodedImage = decodeImageDataUrl(trimmedImageValue);
-
   if (!decodedImage) {
-    if (isAbsoluteUrl(trimmedImageValue)) {
-      return trimmedImageValue;
-    }
-
-    return ensureLocalUploadExists(trimmedImageValue);
+    throw createBadRequestError("image_url must be an absolute URL or an image data URL");
   }
 
-  if (env.aws.s3Bucket) {
-    return uploadImageToS3(decodedImage);
-  }
-
-  if (env.gcs.bucketName) {
-    return uploadImageToGcs(decodedImage);
-  }
-
-  return saveImageLocally(decodedImage);
+  return uploadImageToS3(decodedImage);
 }

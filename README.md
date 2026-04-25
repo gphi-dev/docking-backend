@@ -36,9 +36,16 @@ This repository's Cloud Build deployment now sets `CORS_ORIGINS` for the fronten
 
 ## Production game image uploads
 
-Cloud Run containers have an ephemeral filesystem. Local uploads under `/uploads/games`
-can work after deployment, but files can disappear when instances restart or scale.
+Game image uploads are stored in S3. Send `image_url` as a base64
+`data:image/...;base64,...` value to `POST /api/games` or `PUT /api/games/:gameId`;
+the API stores the object under `images/` and saves the public S3 URL.
 
-For durable production image uploads, set `GCS_BUCKET_NAME` in the Cloud Build trigger
-substitutions so the backend stores game images in Google Cloud Storage instead of the
-container filesystem.
+Required environment:
+
+```text
+AWS_ACCESS_KEY_ID=<set in Secret Manager or local .env>
+AWS_SECRET_ACCESS_KEY=<set in Secret Manager or local .env>
+AWS_REGION=ap-southeast-1
+AWS_S3_BUCKET=gphi-docking-public
+AWS_S3_PUBLIC_URL=https://gphi-docking-public.s3.ap-southeast-1.amazonaws.com
+```

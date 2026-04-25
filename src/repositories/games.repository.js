@@ -1,5 +1,6 @@
 import { QueryTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
+import { resolveStoredGameImageUrl } from "../utils/gameImageStorage.js";
 
 let gamesTableDefinitionPromise;
 
@@ -91,7 +92,7 @@ function mapGameRecord(record, options = {}) {
       : {}),
     name: record.name,
     description: record.description ?? null,
-    image_url: record.image_url ?? null,
+    image_url: resolveStoredGameImageUrl(record.image_url),
     created_at: record.created_at,
     ...(includeTotalPlayers ? { total_players: Number(record.total_players ?? 0) } : {}),
   };
