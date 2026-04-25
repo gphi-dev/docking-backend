@@ -52,6 +52,13 @@ export const env = {
   seedAdminUsername: process.env.SEED_ADMIN_USERNAME || "admin",
   seedAdminPassword: process.env.SEED_ADMIN_PASSWORD || "changeme",
   localUploadsDirectory: normalizeUrl(process.env.LOCAL_UPLOADS_DIR),
+  aws: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "AKIAXP5FYDKS6HASL3GF",
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "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",
+    region: process.env.AWS_REGION || "ap-southeast-1",
+    s3Bucket: process.env.AWS_S3_BUCKET || "gphi-docking-public",
+    s3PublicUrl: normalizeUrl(process.env.AWS_S3_PUBLIC_URL),
+  },
   gcs: {
     bucketName: process.env.GCS_BUCKET_NAME || "",
     projectId: process.env.GCS_PROJECT_ID || "",
