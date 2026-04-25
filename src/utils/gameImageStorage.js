@@ -164,14 +164,14 @@ async function saveImageLocally(decodedImage) {
 }
 
 /**
- * Resolves the stored image URL for create/update game payloads.
+ * Resolves the image value sent by game create/update payloads.
  *
  * Accepted values:
- * - undefined: keep the existing image unchanged on updates
- * - null/empty string: clear the image
- * - absolute http(s) URL: store the URL as-is
- * - /uploads/games/... path: reuse an existing local upload
- * - data:image/... base64 URL: upload to S3, GCS, or local fallback
+ * - undefined: leave the current image unchanged
+ * - null or empty string: clear the image
+ * - absolute http(s) URL: store the external URL as-is
+ * - /uploads/games/<file>: reuse an existing local upload
+ * - data:image/...;base64,...: upload to managed storage and return its URL
  */
 export async function resolveGameImageUrl(imageValue) {
   if (imageValue === undefined) {
