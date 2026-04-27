@@ -11,6 +11,7 @@ import {
 
 const DEFAULT_GAME_SECTION_LIMIT = 10;
 const MAX_GAME_SECTION_LIMIT = 50;
+const GAME_URL_MAX_LENGTH = 255;
 
 function parseGamesSectionLimit(rawValue, queryParamName) {
   if (rawValue === undefined) {
@@ -34,6 +35,35 @@ function normalizeOptionalGameId(rawValue) {
 
   const normalizedGameId = String(rawValue).trim();
   return normalizedGameId || null;
+}
+
+function normalizeOptionalGameUrl(rawValue) {
+  if (rawValue === undefined || rawValue === null) {
+    return null;
+  }
+
+  const normalizedGameUrl = String(rawValue).trim();
+  if (normalizedGameUrl.length > GAME_URL_MAX_LENGTH) {
+    const error = new Error(`game_url must be ${GAME_URL_MAX_LENGTH} characters or less`);
+    error.status = 400;
+    throw error;
+  }
+
+  return normalizedGameUrl || null;
+}
+
+function isDuplicateGameUrlError(error) {
+  if (error?.name !== "SequelizeUniqueConstraintError" && error?.parent?.code !== "ER_DUP_ENTRY") {
+    return false;
+  }
+
+  const fieldNames = [
+    ...Object.keys(error?.fields ?? {}),
+    ...(error?.errors ?? []).map((validationError) => validationError.path),
+  ].filter(Boolean);
+  const databaseMessage = String(error?.parent?.sqlMessage ?? error?.original?.sqlMessage ?? error?.message ?? "");
+
+  return fieldNames.includes("game_url") || databaseMessage.includes("game_url");
 }
 
 export async function listGames(req, res) {
@@ -142,6 +172,7 @@ async function generateUniqueSlug(name, currentGameId = null) {
 export async function createGame(req, res) {
   const name = req.body?.name;
   const game_id = normalizeOptionalGameId(req.body?.game_id);
+  const game_url = normalizeOptionalGameUrl(req.body?.game_url);
   const gamesecretkey = req.body?.game_secret_key ?? req.body?.gamesecretkey;
   const description = req.body?.description ?? null;
   const imageUrl = await resolveGameImageUrl(req.body?.image_url ?? null);
@@ -152,14 +183,23 @@ export async function createGame(req, res) {
 
   const generatedSlug = await generateUniqueSlug(name);
 
-  const createdGame = await Game.create({
-    name,
-    game_id,
-    gamesecretkey,
-    description,
-    image_url: imageUrl,
-    slug: generatedSlug,
-  });
+  let createdGame;
+  try {
+    createdGame = await Game.create({
+      name,
+      game_id,
+      game_url,
+      gamesecretkey,
+      description,
+      image_url: imageUrl,
+      slug: generatedSlug,
+    });
+  } catch (error) {
+    if (isDuplicateGameUrlError(error)) {
+      return res.status(409).json({ message: "game_url is already taken" });
+    }
+    throw error;
+  }
 
   return res.status(201).json(createdGame);
 }
@@ -181,6 +221,9 @@ export async function updateGame(req, res) {
   const nextGameId = req.body?.game_id !== undefined
     ? normalizeOptionalGameId(req.body.game_id)
     : undefined;
+  const nextGameUrl = req.body?.game_url !== undefined
+    ? normalizeOptionalGameUrl(req.body.game_url)
+    : undefined;
   const nextGameSecretKey = req.body?.game_secret_key ?? req.body?.gamesecretkey;
   const nextDescription = req.body?.description;
   const nextImageUrl = await resolveGameImageUrl(req.body?.image_url);
@@ -197,6 +240,9 @@ export async function updateGame(req, res) {
   if (nextGameId !== undefined) {
     game.game_id = nextGameId;
   }
+  if (nextGameUrl !== undefined) {
+    game.game_url = nextGameUrl;
+  }
   if (nextGameSecretKey !== undefined) {
     game.gamesecretkey = nextGameSecretKey;
   }
@@ -207,7 +253,15 @@ export async function updateGame(req, res) {
     game.image_url = nextImageUrl;
   }
 
-  await game.save();
+  try {
+    await game.save();
+  } catch (error) {
+    if (isDuplicateGameUrlError(error)) {
+      return res.status(409).json({ message: "game_url is already taken" });
+    }
+    throw error;
+  }
+
   return res.json(game);
 }
 

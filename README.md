@@ -40,6 +40,9 @@ Game image uploads are stored in S3. Send `image_url` as a base64
 `data:image/...;base64,...` value to `POST /api/games` or `PUT /api/games/:gameId`;
 the API stores the object under `images/` and saves the public S3 URL.
 
+The same game create/update endpoints accept optional `game_url`; when provided,
+it is stored as a unique `VARCHAR(255)`.
+
 Required environment:
 
 ```text
