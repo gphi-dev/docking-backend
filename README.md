@@ -38,8 +38,7 @@ This repository's Cloud Build deployment now sets `CORS_ORIGINS` for the fronten
 
 Game image uploads are stored in S3. Send `image_url` as a base64
 `data:image/...;base64,...` value to `POST /api/games` or `PUT /api/games/:gameId`;
-the API stores the object under `images/` and saves the S3 URL. Game responses
-return a presigned `image_url` so private bucket images can be displayed.
+the API stores the object under `images/` and saves the public S3 URL.
 
 The same game create/update endpoints accept optional `game_url`; when provided,
 it is stored as a unique `VARCHAR(255)`.
@@ -52,5 +51,4 @@ AWS_SECRET_ACCESS_KEY=<set in Secret Manager or local .env>
 AWS_REGION=ap-southeast-1
 AWS_S3_BUCKET=gphi-docking-public
 AWS_S3_PUBLIC_URL=https://gphi-docking-public.s3.ap-southeast-1.amazonaws.com
-AWS_S3_SIGNED_URL_EXPIRES_SECONDS=3600
 ```
