@@ -53,8 +53,16 @@ function isAbsoluteUrl(value) {
   }
 }
 
+export function hasConfiguredS3UploadCredentials() {
+  return Boolean(env.aws.accessKeyId && env.aws.secretAccessKey);
+}
+
+export function isImageDataUrl(value) {
+  return typeof value === "string" && value.trim().startsWith("data:image/");
+}
+
 function decodeImageDataUrl(imageValue) {
-  if (typeof imageValue !== "string" || !imageValue.startsWith("data:image/")) {
+  if (!isImageDataUrl(imageValue)) {
     return null;
   }
 

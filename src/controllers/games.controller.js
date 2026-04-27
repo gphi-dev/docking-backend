@@ -1,7 +1,11 @@
 import { QueryTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 import { Game } from "../models/index.js";
-import { resolveGameImageUrl } from "../utils/gameImageStorage.js";
+import {
+  hasConfiguredS3UploadCredentials,
+  isImageDataUrl,
+  resolveGameImageUrl,
+} from "../utils/gameImageStorage.js";
 import {
   getGameDetailsById,
   getGameDetailsByIdentifier,
@@ -125,6 +129,18 @@ function isDuplicateGameUrlError(error) {
 
 function isDatabaseValueTooLongError(error) {
   return error?.parent?.code === "ER_DATA_TOO_LONG" || String(error?.parent?.sqlMessage ?? "").includes("Data too long");
+}
+
+async function resolveGameImageUrlForUpdate(imageValue, currentImageUrl) {
+  if (imageValue === undefined) {
+    return undefined;
+  }
+
+  if (isImageDataUrl(imageValue) && currentImageUrl && !hasConfiguredS3UploadCredentials()) {
+    return undefined;
+  }
+
+  return resolveGameImageUrl(imageValue);
 }
 
 export async function listGames(req, res) {
@@ -286,7 +302,7 @@ export async function updateGame(req, res) {
     : undefined;
   const nextGameSecretKey = normalizeOptionalGameSecretKey(readGameSecretKeyPayload(req.body));
   const nextDescription = req.body?.description;
-  const nextImageUrl = await resolveGameImageUrl(req.body?.image_url);
+  const nextImageUrl = await resolveGameImageUrlForUpdate(req.body?.image_url, game.image_url);
 
   if (nextName !== undefined) {
     const normalizedNextName = normalizeRequiredGameName(
