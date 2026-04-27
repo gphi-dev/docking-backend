@@ -21,6 +21,12 @@ function createBadRequestError(message) {
   return error;
 }
 
+function createImageUploadError(message, statusCode = 502) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
 function buildImageFileName(fileExtension) {
   return `${Date.now()}-${randomUUID()}.${fileExtension}`;
 }
@@ -73,21 +79,31 @@ function decodeImageDataUrl(imageValue) {
 
 async function uploadImageToS3(decodedImage) {
   if (!env.aws.s3Bucket) {
-    throw createBadRequestError("AWS_S3_BUCKET is required for image uploads");
+    throw createImageUploadError("AWS_S3_BUCKET is required for image uploads", 400);
+  }
+
+  if (!env.aws.accessKeyId || !env.aws.secretAccessKey) {
+    throw createImageUploadError("AWS credentials are required for image uploads", 400);
   }
 
   const fileName = buildImageFileName(decodedImage.fileExtension);
   const filePath = `${s3ImagePathPrefix}/${fileName}`;
 
-  await s3Client.send(
-    new PutObjectCommand({
-      Bucket: env.aws.s3Bucket,
-      Key: filePath,
-      Body: decodedImage.buffer,
-      ContentType: decodedImage.mimeType,
-      CacheControl: immutableImageCacheControl,
-    }),
-  );
+  try {
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: env.aws.s3Bucket,
+        Key: filePath,
+        Body: decodedImage.buffer,
+        ContentType: decodedImage.mimeType,
+        CacheControl: immutableImageCacheControl,
+      }),
+    );
+  } catch (error) {
+    const uploadError = createImageUploadError("Failed to upload image to S3");
+    uploadError.cause = error;
+    throw uploadError;
+  }
 
   return buildS3PublicUrl(filePath);
 }
