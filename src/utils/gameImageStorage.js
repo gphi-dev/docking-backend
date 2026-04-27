@@ -28,6 +28,14 @@ function createImageUploadError(message, statusCode = 502) {
   return error;
 }
 
+function isMissingAwsCredentialsError(error) {
+  return (
+    error?.name === "CredentialsProviderError" ||
+    error?.code === "CredentialsProviderError" ||
+    String(error?.message ?? "").toLowerCase().includes("could not load credentials")
+  );
+}
+
 function buildImageFileName(fileExtension) {
   return `${Date.now()}-${randomUUID()}.${fileExtension}`;
 }
@@ -223,10 +231,6 @@ async function uploadImageToS3(decodedImage) {
     throw createImageUploadError("AWS_S3_BUCKET is required for image uploads", 400);
   }
 
-  if (!env.aws.accessKeyId || !env.aws.secretAccessKey) {
-    throw createImageUploadError("AWS credentials are required for image uploads", 400);
-  }
-
   const fileName = buildImageFileName(decodedImage.fileExtension);
   const filePath = `${s3ImagePathPrefix}/${fileName}`;
 
@@ -241,7 +245,9 @@ async function uploadImageToS3(decodedImage) {
       }),
     );
   } catch (error) {
-    const uploadError = createImageUploadError("Failed to upload image to S3");
+    const uploadError = isMissingAwsCredentialsError(error)
+      ? createImageUploadError("AWS credentials are not configured in Cloud Run", 503)
+      : createImageUploadError("Failed to upload image to S3");
     uploadError.cause = error;
     throw uploadError;
   }
