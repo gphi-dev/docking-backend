@@ -164,7 +164,7 @@ function getStoredS3ObjectKey(imageValue) {
     return null;
   }
 
-  const legacyUploadPrefix = "uploads/images/";
+  const legacyUploadPrefix = "images/";
   const normalizedImagePath = trimmedImageValue.replace(/^\/+/, "");
 
   if (normalizedImagePath.startsWith(legacyUploadPrefix)) {
