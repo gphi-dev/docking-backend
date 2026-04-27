@@ -6,20 +6,6 @@ import {
   listPublicGames,
 } from "../repositories/games.repository.js";
 
-function includeGameUrl(game) {
-  if (!game) {
-    return game;
-  }
-
-  const { id, game_id, game_url, ...rest } = game;
-  return {
-    id,
-    game_id: game_id ?? null,
-    game_url: game_url ?? null,
-    ...rest,
-  };
-}
-
 export async function getGamesCatalog(options = {}) {
   const featuredLimit = options.featuredLimit ?? 10;
   const newLimit = options.newLimit ?? 10;
@@ -33,19 +19,19 @@ export async function getGamesCatalog(options = {}) {
   return {
     success: true,
     data: {
-      games: games.map(includeGameUrl),
-      featured_games: featuredGames.map(includeGameUrl),
-      new_games: newGames.map(includeGameUrl),
+      games,
+      featured_games: featuredGames,
+      new_games: newGames,
     },
   };
 }
 
 export async function getGameDetailsById(gameId) {
-  return includeGameUrl(await findGameById(gameId, { includeGameSecretKey: true }));
+  return findGameById(gameId, { includeGameSecretKey: true });
 }
 
 export async function getGameDetailsBySlug(slug) {
-  return includeGameUrl(await findGameBySlug(slug, { includeGameSecretKey: true }));
+  return findGameBySlug(slug, { includeGameSecretKey: true });
 }
 
 export async function getGameDetailsByIdentifier(identifier) {
