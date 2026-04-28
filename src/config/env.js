@@ -57,5 +57,7 @@ export const env = {
     region: process.env.AWS_REGION || "ap-southeast-1",
     s3Bucket: process.env.AWS_S3_BUCKET || "",
     s3PublicUrl: normalizeUrl(process.env.AWS_S3_PUBLIC_URL),
+    s3SignedUrlExpiresSeconds:
+      Number.parseInt(process.env.AWS_S3_SIGNED_URL_EXPIRES_SECONDS || "3600", 10) || 3600,
   },
 };

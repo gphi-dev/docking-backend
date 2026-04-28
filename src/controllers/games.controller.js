@@ -5,6 +5,7 @@ import {
   hasConfiguredS3UploadCredentials,
   isImageDataUrl,
   resolveGameImageUrl,
+  resolveStoredGameImageUrl,
 } from "../utils/gameImageStorage.js";
 import {
   getGameDetailsById,
@@ -143,6 +144,12 @@ async function resolveGameImageUrlForUpdate(imageValue, currentImageUrl) {
   return resolveGameImageUrl(imageValue);
 }
 
+async function serializeGameResponse(game) {
+  const gamePayload = typeof game.get === "function" ? game.get({ plain: true }) : { ...game };
+  gamePayload.image_url = await resolveStoredGameImageUrl(gamePayload.image_url);
+  return gamePayload;
+}
+
 export async function listGames(req, res) {
   const featuredLimit = parseGamesSectionLimit(req.query.featured_limit, "featured_limit");
   const newLimit = parseGamesSectionLimit(req.query.new_limit, "new_limit");
@@ -277,7 +284,7 @@ export async function createGame(req, res) {
     throw error;
   }
 
-  return res.status(201).json(createdGame);
+  return res.status(201).json(await serializeGameResponse(createdGame));
 }
 
 export async function updateGame(req, res) {
@@ -345,7 +352,7 @@ export async function updateGame(req, res) {
     throw error;
   }
 
-  return res.json(game);
+  return res.json(await serializeGameResponse(game));
 }
 
 export async function deleteGame(req, res) {

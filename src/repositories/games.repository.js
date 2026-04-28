@@ -82,7 +82,7 @@ function buildFeaturedGamesGroupBy(columnSupport) {
   return groupByColumns;
 }
 
-function mapGameRecord(record, options = {}) {
+async function mapGameRecord(record, options = {}) {
   const includeGameSecretKey = options.includeGameSecretKey === true;
   const includeTotalPlayers = options.includeTotalPlayers === true;
 
@@ -99,7 +99,7 @@ function mapGameRecord(record, options = {}) {
       : {}),
     name: record.name,
     description: record.description ?? null,
-    image_url: resolveStoredGameImageUrl(record.image_url),
+    image_url: await resolveStoredGameImageUrl(record.image_url),
     created_at: record.created_at,
     ...(includeTotalPlayers ? { total_players: Number(record.total_players ?? 0) } : {}),
   };
@@ -119,7 +119,7 @@ export async function listPublicGames() {
     },
   );
 
-  return games.map((game) => mapGameRecord(game));
+  return Promise.all(games.map((game) => mapGameRecord(game)));
 }
 
 export async function listNewestPublicGames(limit) {
@@ -140,7 +140,7 @@ export async function listNewestPublicGames(limit) {
     },
   );
 
-  return games.map((game) => mapGameRecord(game));
+  return Promise.all(games.map((game) => mapGameRecord(game)));
 }
 
 export async function listFeaturedPublicGames(limit) {
@@ -161,7 +161,7 @@ export async function listFeaturedPublicGames(limit) {
       },
     );
 
-    return games.map((game) => mapGameRecord(game, { includeTotalPlayers: true }));
+    return Promise.all(games.map((game) => mapGameRecord(game, { includeTotalPlayers: true })));
   }
 
   const groupByColumns = buildFeaturedGamesGroupBy(columnSupport);
@@ -185,7 +185,7 @@ export async function listFeaturedPublicGames(limit) {
     },
   );
 
-  return games.map((game) => mapGameRecord(game, { includeTotalPlayers: true }));
+  return Promise.all(games.map((game) => mapGameRecord(game, { includeTotalPlayers: true })));
 }
 
 export async function findGameById(gameId, options = {}) {
