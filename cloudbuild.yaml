@@ -6,6 +6,9 @@ substitutions:
   _SERVICE_NAME: docking
   _REGION: asia-east1
   _CORS_ORIGINS: https://docking-frontend-635955947416.asia-east1.run.app
+  _GCS_BUCKET_NAME: ""
+  _GCS_PROJECT_ID: "$PROJECT_ID"
+  _GCS_PUBLIC_BASE_URL: ""
   _AWS_REGION: "ap-southeast-1"
   _AWS_S3_BUCKET: "gphi-docking-public"
   _AWS_S3_PUBLIC_URL: "https://gphi-docking-public.s3.ap-southeast-1.amazonaws.com"
@@ -46,7 +49,7 @@ steps:
       - "--platform=managed"
       - "--quiet"
       - "--add-cloudsql-instances=${_CLOUDSQL_INSTANCES}"
-      - "--update-env-vars=CORS_ORIGINS=${_CORS_ORIGINS},DB_NAME=${_DB_NAME},DB_SOCKET_PATH=/cloudsql/${_CLOUDSQL_INSTANCES},AWS_REGION=${_AWS_REGION},AWS_S3_BUCKET=${_AWS_S3_BUCKET},AWS_S3_PUBLIC_URL=${_AWS_S3_PUBLIC_URL}"
+      - "--update-env-vars=CORS_ORIGINS=${_CORS_ORIGINS},DB_NAME=${_DB_NAME},DB_SOCKET_PATH=/cloudsql/${_CLOUDSQL_INSTANCES},GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},GCS_PROJECT_ID=${_GCS_PROJECT_ID},GCS_PUBLIC_BASE_URL=${_GCS_PUBLIC_BASE_URL},AWS_REGION=${_AWS_REGION},AWS_S3_BUCKET=${_AWS_S3_BUCKET},AWS_S3_PUBLIC_URL=${_AWS_S3_PUBLIC_URL}"
       - "--update-secrets=AWS_ACCESS_KEY_ID=${_AWS_ACCESS_KEY_ID_SECRET}:latest,AWS_SECRET_ACCESS_KEY=${_AWS_SECRET_ACCESS_KEY_SECRET}:latest"
 
 images:
