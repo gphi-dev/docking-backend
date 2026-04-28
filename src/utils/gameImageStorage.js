@@ -32,32 +32,25 @@ const mimeTypeToExtension = Object.freeze({
   "image/svg+xml": "svg",
 });
 
+export function hasConfiguredS3UploadCredentials() {
+  return Boolean(env.aws.s3Bucket && env.aws.accessKeyId && env.aws.secretAccessKey);
+}
+
+export function isImageDataUrl(imageValue) {
+  return typeof imageValue === "string" && imageValue.startsWith("data:image/");
+}
+
 function createBadRequestError(message) {
   const error = new Error(message);
   error.statusCode = 400;
   return error;
 }
 
-function buildImageFileName(fileExtension) {
-  return `${Date.now()}-${randomUUID()}.${fileExtension}`;
+function createImageUploadError(message, statusCode = 502) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
 }
-
-function decodeImageDataUrl(imageValue) {
-  if (typeof imageValue !== "string" || !imageValue.startsWith("data:image/")) {
-    return null;
-  }
-
-  const matches = imageValue.match(dataImageUrlPattern);
-  if (!matches) {
-    throw createBadRequestError("Invalid image data URL");
-  }
-
-  const [, mimeType, encodedData] = matches;
-  const fileExtension = mimeTypeToExtension[mimeType];
-
-  if (!fileExtension) {
-    throw createBadRequestError("Unsupported image type");
-  }
 
 function buildImageFileName(fileExtension) {
   return `${Date.now()}-${randomUUID()}.${fileExtension}`;
@@ -70,9 +63,15 @@ function encodePathSegments(filePath) {
     .join("/");
 }
 
-function buildS3PublicUrl(filePath) {
-  const baseUrl =
-    env.aws.s3PublicUrl || `https://${env.aws.s3Bucket}.s3.${env.aws.region}.amazonaws.com`;
+function decodePathSegments(filePath) {
+  return filePath
+    .split("/")
+    .map((segment) => decodeURIComponent(segment))
+    .join("/");
+}
+
+function buildGcsPublicUrl(filePath) {
+  const baseUrl = env.gcs.publicBaseUrl || `${gcsPublicHost}/${env.gcs.bucketName}`;
   return `${baseUrl}/${encodePathSegments(filePath)}`;
 }
 
@@ -91,17 +90,64 @@ function isAbsoluteUrl(value) {
   }
 }
 
-async function ensureLocalUploadExists(imagePath) {
-  const normalizedImagePath = imagePath.replace(/^\/+/, "");
-  const fileName = path.basename(normalizedImagePath);
-
-  if (normalizedImagePath !== `${localUploadPathPrefix}${fileName}`) {
-    throw createBadRequestError(
-      "image_url must be an absolute URL, a data URL, or an existing /uploads/games path",
-    );
+function decodeImageDataUrl(imageValue) {
+  if (!isImageDataUrl(imageValue)) {
+    return null;
   }
 
-  const filePath = path.join(localGamesUploadsDirectory, fileName);
+  const matches = imageValue.match(dataImageUrlPattern);
+  if (!matches) {
+    throw createBadRequestError("Invalid image data URL");
+  }
+
+  const [, mimeType, encodedData] = matches;
+  const fileExtension = mimeTypeToExtension[mimeType];
+
+  if (!fileExtension) {
+    throw createBadRequestError("Unsupported image type");
+  }
+
+  return {
+    fileExtension,
+    mimeType,
+    buffer: Buffer.from(encodedData, "base64"),
+  };
+}
+
+function getConfiguredS3PublicUrlObjectKey(imageValue) {
+  if (!env.aws.s3PublicUrl) {
+    return null;
+  }
+
+  try {
+    const imageUrl = new URL(imageValue);
+    const publicBaseUrl = new URL(`${env.aws.s3PublicUrl}/`);
+
+    if (imageUrl.origin !== publicBaseUrl.origin) {
+      return null;
+    }
+
+    const basePath = publicBaseUrl.pathname.replace(/^\/+|\/+$/g, "");
+    const imagePath = imageUrl.pathname.replace(/^\/+/, "");
+
+    if (!basePath) {
+      return decodePathSegments(imagePath);
+    }
+
+    if (imagePath === basePath || !imagePath.startsWith(`${basePath}/`)) {
+      return null;
+    }
+
+    return decodePathSegments(imagePath.slice(basePath.length + 1));
+  } catch {
+    return null;
+  }
+}
+
+function getVirtualHostedS3ObjectKey(imageValue) {
+  if (!env.aws.s3Bucket) {
+    return null;
+  }
 
   try {
     const imageUrl = new URL(imageValue);
@@ -116,7 +162,7 @@ async function ensureLocalUploadExists(imagePath) {
 
     return decodePathSegments(imageUrl.pathname.replace(/^\/+/, ""));
   } catch {
-    throw createBadRequestError(`Image file not found: ${localPublicPathPrefix}/${fileName}`);
+    return null;
   }
 }
 
@@ -141,7 +187,10 @@ function getPathStyleS3ObjectKey(imageValue) {
       return null;
     }
 
-  return `${localPublicPathPrefix}/${fileName}`;
+    return decodePathSegments(pathParts.join("/"));
+  } catch {
+    return null;
+  }
 }
 
 function getStoredS3ObjectKey(imageValue) {
@@ -154,11 +203,10 @@ function getStoredS3ObjectKey(imageValue) {
     return null;
   }
 
-  const legacyUploadPrefix = "uploads/games/";
   const normalizedImagePath = trimmedImageValue.replace(/^\/+/, "");
 
-  if (normalizedImagePath.startsWith(legacyUploadPrefix)) {
-    const fileName = normalizedImagePath.slice(legacyUploadPrefix.length);
+  if (normalizedImagePath.startsWith(localUploadPathPrefix)) {
+    const fileName = normalizedImagePath.slice(localUploadPathPrefix.length);
     return `${s3ImagePathPrefix}/${fileName}`;
   }
 
@@ -177,33 +225,32 @@ function getStoredS3ObjectKey(imageValue) {
   );
 }
 
-async function buildSignedS3ImageUrl(filePath) {
-  if (!hasConfiguredS3UploadCredentials()) {
-    return buildS3PublicUrl(filePath);
+async function ensureLocalUploadExists(imagePath) {
+  const normalizedImagePath = imagePath.replace(/^\/+/, "");
+  const fileName = path.basename(normalizedImagePath);
+
+  if (normalizedImagePath !== `${localUploadPathPrefix}${fileName}`) {
+    throw createBadRequestError(
+      "image_url must be an absolute URL, a data URL, or an existing /uploads/games path",
+    );
   }
 
-  return getSignedUrl(
-    s3Client,
-    new GetObjectCommand({
-      Bucket: env.aws.s3Bucket,
-      Key: filePath,
-    }),
-    { expiresIn: env.aws.s3SignedUrlExpiresSeconds },
-  );
+  const filePath = path.join(localGamesUploadsDirectory, fileName);
+
+  try {
+    await access(filePath, constants.R_OK);
+  } catch {
+    throw createBadRequestError(`Image file not found: ${localPublicPathPrefix}/${fileName}`);
+  }
+
+  return `${localPublicPathPrefix}/${fileName}`;
 }
 
-function decodeImageDataUrl(imageValue) {
-  if (!isImageDataUrl(imageValue)) {
-    return null;
-  }
-
-  const matches = imageValue.match(dataImageUrlPattern);
-  if (!matches) {
-    throw createBadRequestError("Invalid image data URL");
-  }
-
-  const [, mimeType, encodedData] = matches;
-  const fileExtension = mimeTypeToExtension[mimeType];
+async function uploadImageToGcs(decodedImage) {
+  const { Storage } = await import("@google-cloud/storage");
+  const storage = env.gcs.projectId
+    ? new Storage({ projectId: env.gcs.projectId })
+    : new Storage();
 
   const bucket = storage.bucket(env.gcs.bucketName);
   const fileName = buildImageFileName(decodedImage.fileExtension);
@@ -217,13 +264,12 @@ function decodeImageDataUrl(imageValue) {
     resumable: false,
   });
 
+  return buildGcsPublicUrl(filePath);
+}
+
 async function uploadImageToS3(decodedImage) {
   if (!env.aws.s3Bucket) {
     throw createImageUploadError("AWS_S3_BUCKET is required for image uploads", 400);
-  }
-
-  if (!env.aws.accessKeyId || !env.aws.secretAccessKey) {
-    throw createImageUploadError("AWS credentials are required for image uploads", 400);
   }
 
   const fileName = buildImageFileName(decodedImage.fileExtension);
@@ -248,33 +294,13 @@ async function uploadImageToS3(decodedImage) {
   return buildS3PublicUrl(filePath);
 }
 
-async function uploadImageToS3(decodedImage) {
-  const fileName = buildImageFileName(decodedImage.fileExtension);
-  const filePath = `${s3ImagePathPrefix}/${fileName}`;
-
-  await s3Client.send(
-    new PutObjectCommand({
-      Bucket: env.aws.s3Bucket,
-      Key: filePath,
-      Body: decodedImage.buffer,
-      ContentType: decodedImage.mimeType,
-      CacheControl: immutableImageCacheControl,
-    }),
-  );
-
-  return buildS3PublicUrl(filePath);
-}
-
 async function saveImageLocally(decodedImage) {
   await mkdir(localGamesUploadsDirectory, { recursive: true });
 
   const fileName = buildImageFileName(decodedImage.fileExtension);
   const filePath = path.join(localGamesUploadsDirectory, fileName);
 
-  const s3ObjectKey = getStoredS3ObjectKey(trimmedImageValue);
-  if (!s3ObjectKey) {
-    return trimmedImageValue;
-  }
+  await writeFile(filePath, decodedImage.buffer);
 
   return `${localPublicPathPrefix}/${fileName}`;
 }
@@ -314,12 +340,9 @@ export async function resolveGameImageUrl(imageValue) {
       return trimmedImageValue;
     }
 
-  if (isAbsoluteUrl(trimmedImageValue)) {
-    return trimmedImageValue;
+    return ensureLocalUploadExists(trimmedImageValue);
   }
 
-  // Storage priority: S3 for current production, GCS for legacy deployments,
-  // and local disk for development or fallback environments.
   if (env.aws.s3Bucket) {
     return uploadImageToS3(decodedImage);
   }
@@ -328,5 +351,28 @@ export async function resolveGameImageUrl(imageValue) {
     return uploadImageToGcs(decodedImage);
   }
 
-  return uploadImageToS3(decodedImage);
+  return saveImageLocally(decodedImage);
+}
+
+/**
+ * Resolves stored game image values for API responses.
+ *
+ * S3-backed values are returned as stable public URLs, not presigned URLs.
+ */
+export async function resolveStoredGameImageUrl(imageValue) {
+  if (!imageValue) {
+    return null;
+  }
+
+  const trimmedImageValue = String(imageValue).trim();
+  if (!trimmedImageValue) {
+    return null;
+  }
+
+  const s3ObjectKey = getStoredS3ObjectKey(trimmedImageValue);
+  if (s3ObjectKey) {
+    return buildS3PublicUrl(s3ObjectKey);
+  }
+
+  return trimmedImageValue;
 }
