@@ -16,6 +16,6 @@ ENV AWS_S3_PUBLIC_URL=https://gphi-docking-public.s3.ap-southeast-1.amazonaws.co
 
 USER node
 
-EXPOSE 8080
+EXPOSE 3036
 
 CMD ["node", "src/index.js"]
