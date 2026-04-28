@@ -45,7 +45,7 @@ steps:
       - "--platform=managed"
       - "--quiet"
       - "--add-cloudsql-instances=${_CLOUDSQL_INSTANCES}"
-      - "--update-env-vars=CORS_ORIGINS=${_CORS_ORIGINS},AWS_REGION=${_AWS_REGION},AWS_S3_BUCKET=${_AWS_S3_BUCKET},AWS_S3_PUBLIC_URL=${_AWS_S3_PUBLIC_URL}"
+      - "--update-env-vars=CORS_ORIGINS=${_CORS_ORIGINS},DB_SOCKET_PATH=/cloudsql/${_CLOUDSQL_INSTANCES},AWS_REGION=${_AWS_REGION},AWS_S3_BUCKET=${_AWS_S3_BUCKET},AWS_S3_PUBLIC_URL=${_AWS_S3_PUBLIC_URL}"
       - "--update-secrets=AWS_ACCESS_KEY_ID=${_AWS_ACCESS_KEY_ID_SECRET}:latest,AWS_SECRET_ACCESS_KEY=${_AWS_SECRET_ACCESS_KEY_SECRET}:latest"
 
 images:
