@@ -16,7 +16,8 @@ substitutions:
   _AWS_SECRET_ACCESS_KEY_SECRET: "AWS_SECRET_ACCESS_KEY"
   # Example: asia-east1-docker.pkg.dev/$PROJECT_ID/REPO/IMAGE:tag
   _AR_REPOSITORY: cloud-run-source-deploy
-  _CLOUDSQL_INSTANCES: utility-grin-487808-f7:asia-east1:minigames-db
+  _CLOUDSQL_INSTANCES: utility-grin-487808-f7:asia-southeast1:minigames-db
+  _DB_NAME: main
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -48,7 +49,7 @@ steps:
       - "--platform=managed"
       - "--quiet"
       - "--add-cloudsql-instances=${_CLOUDSQL_INSTANCES}"
-      - "--update-env-vars=CORS_ORIGINS=${_CORS_ORIGINS},GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},GCS_PROJECT_ID=${_GCS_PROJECT_ID},GCS_PUBLIC_BASE_URL=${_GCS_PUBLIC_BASE_URL},AWS_REGION=${_AWS_REGION},AWS_S3_BUCKET=${_AWS_S3_BUCKET},AWS_S3_PUBLIC_URL=${_AWS_S3_PUBLIC_URL}"
+      - "--update-env-vars=CORS_ORIGINS=${_CORS_ORIGINS},DB_NAME=${_DB_NAME},DB_SOCKET_PATH=/cloudsql/${_CLOUDSQL_INSTANCES},GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},GCS_PROJECT_ID=${_GCS_PROJECT_ID},GCS_PUBLIC_BASE_URL=${_GCS_PUBLIC_BASE_URL},AWS_REGION=${_AWS_REGION},AWS_S3_BUCKET=${_AWS_S3_BUCKET},AWS_S3_PUBLIC_URL=${_AWS_S3_PUBLIC_URL}"
       - "--update-secrets=AWS_ACCESS_KEY_ID=${_AWS_ACCESS_KEY_ID_SECRET}:latest,AWS_SECRET_ACCESS_KEY=${_AWS_SECRET_ACCESS_KEY_SECRET}:latest"
 
 images:
