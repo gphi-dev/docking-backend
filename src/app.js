@@ -9,7 +9,6 @@ import { adminsRouter } from "./routes/admins.routes.js";
 import { usermobileRouter } from "./routes/usermobile.routes.js";
 import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
-import { localUploadsDirectory } from "./utils/gameImageStorage.js";
 
 export function createApp() {
   const app = express();
@@ -49,7 +48,6 @@ export function createApp() {
   }
 
   app.use(express.json({ limit: "1mb" }));
-  app.use("/uploads", express.static(localUploadsDirectory));
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });

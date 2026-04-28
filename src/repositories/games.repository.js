@@ -1,5 +1,6 @@
 import { QueryTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
+import { resolveStoredGameImageUrl } from "../utils/gameImageStorage.js";
 
 let gamesTableDefinitionPromise;
 
@@ -23,13 +24,14 @@ export async function hasGamesTableColumn(columnName) {
 }
 
 async function getGamesColumnSupport() {
-  const [hasGameId, hasGameSecretKey, hasSlug] = await Promise.all([
+  const [hasGameId, hasGameUrl, hasGameSecretKey, hasSlug] = await Promise.all([
     hasGamesTableColumn("game_id"),
+    hasGamesTableColumn("game_url"),
     hasGamesTableColumn("gamesecretkey"),
     hasGamesTableColumn("slug"),
   ]);
 
-  return { hasGameId, hasGameSecretKey, hasSlug };
+  return { hasGameId, hasGameUrl, hasGameSecretKey, hasSlug };
 }
 
 function buildGameSelectColumns(columnSupport, options = {}) {
@@ -37,6 +39,7 @@ function buildGameSelectColumns(columnSupport, options = {}) {
   const selectedColumns = [
     "games.id",
     columnSupport.hasGameId ? "games.game_id" : "NULL AS game_id",
+    columnSupport.hasGameUrl ? "games.game_url" : "NULL AS game_url",
     columnSupport.hasSlug ? "games.slug" : "NULL AS slug",
     "games.name",
     "games.description",
@@ -68,6 +71,10 @@ function buildFeaturedGamesGroupBy(columnSupport) {
     groupByColumns.splice(1, 0, "games.game_id");
   }
 
+  if (columnSupport.hasGameUrl) {
+    groupByColumns.splice(columnSupport.hasGameId ? 2 : 1, 0, "games.game_url");
+  }
+
   if (columnSupport.hasSlug) {
     groupByColumns.splice(groupByColumns.length - 1, 0, "games.slug");
   }
@@ -75,13 +82,14 @@ function buildFeaturedGamesGroupBy(columnSupport) {
   return groupByColumns;
 }
 
-function mapGameRecord(record, options = {}) {
+async function mapGameRecord(record, options = {}) {
   const includeGameSecretKey = options.includeGameSecretKey === true;
   const includeTotalPlayers = options.includeTotalPlayers === true;
 
   return {
     id: record.id,
     game_id: record.game_id ?? null,
+    game_url: record.game_url ?? null,
     slug: record.slug ?? null,
     ...(includeGameSecretKey
       ? {
@@ -91,7 +99,7 @@ function mapGameRecord(record, options = {}) {
       : {}),
     name: record.name,
     description: record.description ?? null,
-    image_url: record.image_url ?? null,
+    image_url: await resolveStoredGameImageUrl(record.image_url),
     created_at: record.created_at,
     ...(includeTotalPlayers ? { total_players: Number(record.total_players ?? 0) } : {}),
   };
@@ -111,7 +119,7 @@ export async function listPublicGames() {
     },
   );
 
-  return games.map((game) => mapGameRecord(game));
+  return Promise.all(games.map((game) => mapGameRecord(game)));
 }
 
 export async function listNewestPublicGames(limit) {
@@ -132,7 +140,7 @@ export async function listNewestPublicGames(limit) {
     },
   );
 
-  return games.map((game) => mapGameRecord(game));
+  return Promise.all(games.map((game) => mapGameRecord(game)));
 }
 
 export async function listFeaturedPublicGames(limit) {
@@ -153,7 +161,7 @@ export async function listFeaturedPublicGames(limit) {
       },
     );
 
-    return games.map((game) => mapGameRecord(game, { includeTotalPlayers: true }));
+    return Promise.all(games.map((game) => mapGameRecord(game, { includeTotalPlayers: true })));
   }
 
   const groupByColumns = buildFeaturedGamesGroupBy(columnSupport);
@@ -177,7 +185,7 @@ export async function listFeaturedPublicGames(limit) {
     },
   );
 
-  return games.map((game) => mapGameRecord(game, { includeTotalPlayers: true }));
+  return Promise.all(games.map((game) => mapGameRecord(game, { includeTotalPlayers: true })));
 }
 
 export async function findGameById(gameId, options = {}) {

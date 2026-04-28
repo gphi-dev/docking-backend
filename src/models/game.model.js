@@ -17,6 +17,11 @@ export const Game = sequelize.define(
       type: DataTypes.STRING(45),
       allowNull: true,
     },
+    game_url: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      unique: true,
+    },
     gamesecretkey: {
       type: DataTypes.STRING(45),
       allowNull: true,

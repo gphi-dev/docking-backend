@@ -13,6 +13,19 @@ const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
+function parsePoints(rawValue) {
+  if (rawValue === undefined || rawValue === null || String(rawValue).trim() === "") {
+    return 0;
+  }
+
+  const points = Number.parseInt(String(rawValue), 10);
+  if (!Number.isFinite(points)) {
+    return null;
+  }
+
+  return points;
+}
+
 /**
  * @service mockSmsProvider
  * @description Simulates sending an SMS notification. 
@@ -104,6 +117,7 @@ import { Usermobile } from "../models/usermobile.model.js";
 export async function createOtpSession(req, res) {
   let phone = req.body?.phone;
   const game_id = req.body?.game_id;
+  const points = parsePoints(req.body?.points);
   // Initial existence checks
   if (!phone) {
     return res.status(400).json({ 
@@ -118,6 +132,14 @@ export async function createOtpSession(req, res) {
       success: false, 
       errorCode: "ERR_MISSING_GAME_ID", 
       message: "game_id is required" 
+    });
+  }
+
+  if (points === null) {
+    return res.status(400).json({
+      success: false,
+      errorCode: "ERR_INVALID_POINTS",
+      message: "points must be a valid integer"
     });
   }
 
@@ -178,6 +200,7 @@ export async function createOtpSession(req, res) {
       verified_at: null,
       otp: otpCode,
       otp_expires_at: expiresAt,
+      points: points,
     });
 
     // Generate the JWT (Bearer Token)
@@ -197,7 +220,8 @@ export async function createOtpSession(req, res) {
       successCode: "SUCCESS_SESSION_CREATED",
       data: [
         {
-          game_id: createdSession.game_id
+          game_id: createdSession.game_id,
+          points: createdSession.points
         }
       ],
       token: token                

@@ -139,7 +139,7 @@ export async function getUsersMaskedScoreListByGame(req, res) {
     where: { game_id: gameId },
     attributes: ["phone", "game_id", "points"],
     order: [["points", "DESC"], ["created_at", "ASC"]],
-    limit: 2,
+    limit: 3,
   });
 
   return res.json(
