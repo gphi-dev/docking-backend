@@ -46,8 +46,6 @@ async function waitForServerToListen(server) {
 }
 
 async function startHttpServer() {
-  await verifyDatabaseConnection();
-
   const app = createApp();
   const server = app.listen(env.port);
   await waitForServerToListen(server);
@@ -56,6 +54,14 @@ async function startHttpServer() {
   });
 
   console.log(`API listening on port ${env.port} (${env.nodeEnv})`);
+
+  verifyDatabaseConnection()
+    .then(() => {
+      console.log("Database connection verified");
+    })
+    .catch((error) => {
+      console.error("Database connection verification failed:", error);
+    });
 
   const shutdownSignals = ["SIGINT", "SIGTERM"];
   shutdownSignals.forEach((signalName) => {
