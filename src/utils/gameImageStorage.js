@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { env } from "../config/env.js";
 import { s3Client } from "../config/s3.js";
 
@@ -28,14 +27,6 @@ function createImageUploadError(message, statusCode = 502) {
   return error;
 }
 
-function isMissingAwsCredentialsError(error) {
-  return (
-    error?.name === "CredentialsProviderError" ||
-    error?.code === "CredentialsProviderError" ||
-    String(error?.message ?? "").toLowerCase().includes("could not load credentials")
-  );
-}
-
 function buildImageFileName(fileExtension) {
   return `${Date.now()}-${randomUUID()}.${fileExtension}`;
 }
@@ -53,13 +44,6 @@ function buildS3PublicUrl(filePath) {
   return `${baseUrl}/${encodePathSegments(filePath)}`;
 }
 
-function decodePathSegments(filePath) {
-  return filePath
-    .split("/")
-    .map((segment) => decodeURIComponent(segment))
-    .join("/");
-}
-
 function isAbsoluteUrl(value) {
   try {
     const url = new URL(value);
@@ -75,131 +59,6 @@ export function hasConfiguredS3UploadCredentials() {
 
 export function isImageDataUrl(value) {
   return typeof value === "string" && value.trim().startsWith("data:image/");
-}
-
-function getConfiguredS3PublicUrlObjectKey(imageValue) {
-  if (!env.aws.s3PublicUrl) {
-    return null;
-  }
-
-  try {
-    const imageUrl = new URL(imageValue);
-    const publicUrl = new URL(`${env.aws.s3PublicUrl}/`);
-
-    if (imageUrl.origin !== publicUrl.origin) {
-      return null;
-    }
-
-    const publicPathPrefix = publicUrl.pathname.replace(/\/+$/, "");
-    if (publicPathPrefix && !imageUrl.pathname.startsWith(`${publicPathPrefix}/`)) {
-      return null;
-    }
-
-    const keyPath = publicPathPrefix
-      ? imageUrl.pathname.slice(publicPathPrefix.length + 1)
-      : imageUrl.pathname.replace(/^\/+/, "");
-
-    return decodePathSegments(keyPath);
-  } catch {
-    return null;
-  }
-}
-
-function getVirtualHostedS3ObjectKey(imageValue) {
-  if (!env.aws.s3Bucket) {
-    return null;
-  }
-
-  try {
-    const imageUrl = new URL(imageValue);
-    const allowedHosts = new Set([
-      `${env.aws.s3Bucket}.s3.${env.aws.region}.amazonaws.com`,
-      `${env.aws.s3Bucket}.s3.amazonaws.com`,
-    ]);
-
-    if (!allowedHosts.has(imageUrl.hostname)) {
-      return null;
-    }
-
-    return decodePathSegments(imageUrl.pathname.replace(/^\/+/, ""));
-  } catch {
-    return null;
-  }
-}
-
-function getPathStyleS3ObjectKey(imageValue) {
-  if (!env.aws.s3Bucket) {
-    return null;
-  }
-
-  try {
-    const imageUrl = new URL(imageValue);
-    const allowedHosts = new Set([
-      `s3.${env.aws.region}.amazonaws.com`,
-      "s3.amazonaws.com",
-    ]);
-
-    if (!allowedHosts.has(imageUrl.hostname)) {
-      return null;
-    }
-
-    const pathParts = imageUrl.pathname.replace(/^\/+/, "").split("/");
-    if (pathParts.shift() !== env.aws.s3Bucket) {
-      return null;
-    }
-
-    return decodePathSegments(pathParts.join("/"));
-  } catch {
-    return null;
-  }
-}
-
-function getStoredS3ObjectKey(imageValue) {
-  if (!imageValue || typeof imageValue !== "string" || !env.aws.s3Bucket) {
-    return null;
-  }
-
-  const trimmedImageValue = imageValue.trim();
-  if (!trimmedImageValue) {
-    return null;
-  }
-
-  const legacyUploadPrefix = "images/";
-  const normalizedImagePath = trimmedImageValue.replace(/^\/+/, "");
-
-  if (normalizedImagePath.startsWith(legacyUploadPrefix)) {
-    const fileName = normalizedImagePath.slice(legacyUploadPrefix.length);
-    return `${s3ImagePathPrefix}/${fileName}`;
-  }
-
-  if (normalizedImagePath.startsWith(`${s3ImagePathPrefix}/`)) {
-    return normalizedImagePath;
-  }
-
-  if (!isAbsoluteUrl(trimmedImageValue)) {
-    return null;
-  }
-
-  return (
-    getConfiguredS3PublicUrlObjectKey(trimmedImageValue) ||
-    getVirtualHostedS3ObjectKey(trimmedImageValue) ||
-    getPathStyleS3ObjectKey(trimmedImageValue)
-  );
-}
-
-async function buildSignedS3ImageUrl(filePath) {
-  if (!hasConfiguredS3UploadCredentials()) {
-    return buildS3PublicUrl(filePath);
-  }
-
-  return getSignedUrl(
-    s3Client,
-    new GetObjectCommand({
-      Bucket: env.aws.s3Bucket,
-      Key: filePath,
-    }),
-    { expiresIn: env.aws.s3SignedUrlExpiresSeconds },
-  );
 }
 
 function decodeImageDataUrl(imageValue) {
@@ -231,6 +90,10 @@ async function uploadImageToS3(decodedImage) {
     throw createImageUploadError("AWS_S3_BUCKET is required for image uploads", 400);
   }
 
+  if (!env.aws.accessKeyId || !env.aws.secretAccessKey) {
+    throw createImageUploadError("AWS credentials are required for image uploads", 400);
+  }
+
   const fileName = buildImageFileName(decodedImage.fileExtension);
   const filePath = `${s3ImagePathPrefix}/${fileName}`;
 
@@ -245,9 +108,7 @@ async function uploadImageToS3(decodedImage) {
       }),
     );
   } catch (error) {
-    const uploadError = isMissingAwsCredentialsError(error)
-      ? createImageUploadError("AWS credentials are not configured in Cloud Run", 503)
-      : createImageUploadError("Failed to upload image to S3");
+    const uploadError = createImageUploadError("Failed to upload image to S3");
     uploadError.cause = error;
     throw uploadError;
   }
@@ -255,7 +116,7 @@ async function uploadImageToS3(decodedImage) {
   return buildS3PublicUrl(filePath);
 }
 
-export async function resolveStoredGameImageUrl(imageValue) {
+export function resolveStoredGameImageUrl(imageValue) {
   if (!imageValue || typeof imageValue !== "string") {
     return imageValue ?? null;
   }
@@ -265,12 +126,18 @@ export async function resolveStoredGameImageUrl(imageValue) {
     return null;
   }
 
-  const s3ObjectKey = getStoredS3ObjectKey(trimmedImageValue);
-  if (!s3ObjectKey) {
+  if (isAbsoluteUrl(trimmedImageValue)) {
     return trimmedImageValue;
   }
 
-  return buildSignedS3ImageUrl(s3ObjectKey);
+  const legacyUploadPrefix = "uploads/games/";
+  const normalizedImagePath = trimmedImageValue.replace(/^\/+/, "");
+  if (!normalizedImagePath.startsWith(legacyUploadPrefix) || !env.aws.s3Bucket) {
+    return trimmedImageValue;
+  }
+
+  const fileName = normalizedImagePath.slice(legacyUploadPrefix.length);
+  return buildS3PublicUrl(`${s3ImagePathPrefix}/${fileName}`);
 }
 
 /**
