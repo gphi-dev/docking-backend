@@ -24,14 +24,15 @@ export async function hasGamesTableColumn(columnName) {
 }
 
 async function getGamesColumnSupport() {
-  const [hasGameId, hasGameUrl, hasGameSecretKey, hasSlug] = await Promise.all([
+  const [hasGameId, hasGameUrl, hasGameSecretKey, hasSlug, hasBackgroundUrl] = await Promise.all([
     hasGamesTableColumn("game_id"),
     hasGamesTableColumn("game_url"),
     hasGamesTableColumn("gamesecretkey"),
     hasGamesTableColumn("slug"),
+    hasGamesTableColumn("background_url"),
   ]);
 
-  return { hasGameId, hasGameUrl, hasGameSecretKey, hasSlug };
+  return { hasGameId, hasGameUrl, hasGameSecretKey, hasSlug, hasBackgroundUrl };
 }
 
 function buildGameSelectColumns(columnSupport, options = {}) {
@@ -44,6 +45,7 @@ function buildGameSelectColumns(columnSupport, options = {}) {
     "games.name",
     "games.description",
     "games.image_url",
+    columnSupport.hasBackgroundUrl ? "games.background_url" : "NULL AS background_url",
     "games.created_at",
   ];
 
@@ -79,12 +81,20 @@ function buildFeaturedGamesGroupBy(columnSupport) {
     groupByColumns.splice(groupByColumns.length - 1, 0, "games.slug");
   }
 
+  if (columnSupport.hasBackgroundUrl) {
+    groupByColumns.splice(groupByColumns.length - 1, 0, "games.background_url");
+  }
+
   return groupByColumns;
 }
 
 async function mapGameRecord(record, options = {}) {
   const includeGameSecretKey = options.includeGameSecretKey === true;
   const includeTotalPlayers = options.includeTotalPlayers === true;
+  const [imageUrl, backgroundUrl] = await Promise.all([
+    resolveStoredGameImageUrl(record.image_url),
+    resolveStoredGameImageUrl(record.background_url),
+  ]);
 
   return {
     id: record.id,
@@ -99,7 +109,8 @@ async function mapGameRecord(record, options = {}) {
       : {}),
     name: record.name,
     description: record.description ?? null,
-    image_url: await resolveStoredGameImageUrl(record.image_url),
+    image_url: imageUrl,
+    background_url: backgroundUrl,
     created_at: record.created_at,
     ...(includeTotalPlayers ? { total_players: Number(record.total_players ?? 0) } : {}),
   };

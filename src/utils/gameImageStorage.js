@@ -225,13 +225,13 @@ function getStoredS3ObjectKey(imageValue) {
   );
 }
 
-async function ensureLocalUploadExists(imagePath) {
+async function ensureLocalUploadExists(imagePath, fieldName = "image_url") {
   const normalizedImagePath = imagePath.replace(/^\/+/, "");
   const fileName = path.basename(normalizedImagePath);
 
   if (normalizedImagePath !== `${localUploadPathPrefix}${fileName}`) {
     throw createBadRequestError(
-      "image_url must be an absolute URL, a data URL, or an existing /uploads/games path",
+      `${fieldName} must be an absolute URL, a data URL, or an existing /uploads/games path`,
     );
   }
 
@@ -315,7 +315,9 @@ async function saveImageLocally(decodedImage) {
  * - /uploads/games/<file>: reuse an existing local upload
  * - data:image/...;base64,...: upload to managed storage and return its URL
  */
-export async function resolveGameImageUrl(imageValue) {
+export async function resolveGameImageUrl(imageValue, options = {}) {
+  const fieldName = options.fieldName ?? "image_url";
+
   if (imageValue === undefined) {
     return undefined;
   }
@@ -325,7 +327,7 @@ export async function resolveGameImageUrl(imageValue) {
   }
 
   if (typeof imageValue !== "string") {
-    throw createBadRequestError("image_url must be a string");
+    throw createBadRequestError(`${fieldName} must be a string`);
   }
 
   const trimmedImageValue = imageValue.trim();
@@ -340,7 +342,7 @@ export async function resolveGameImageUrl(imageValue) {
       return trimmedImageValue;
     }
 
-    return ensureLocalUploadExists(trimmedImageValue);
+    return ensureLocalUploadExists(trimmedImageValue, fieldName);
   }
 
   if (env.aws.s3Bucket) {

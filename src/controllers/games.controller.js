@@ -132,7 +132,7 @@ function isDatabaseValueTooLongError(error) {
   return error?.parent?.code === "ER_DATA_TOO_LONG" || String(error?.parent?.sqlMessage ?? "").includes("Data too long");
 }
 
-async function resolveGameImageUrlForUpdate(imageValue, currentImageUrl) {
+async function resolveGameImageUrlForUpdate(imageValue, currentImageUrl, fieldName = "image_url") {
   if (imageValue === undefined) {
     return undefined;
   }
@@ -141,12 +141,17 @@ async function resolveGameImageUrlForUpdate(imageValue, currentImageUrl) {
     return undefined;
   }
 
-  return resolveGameImageUrl(imageValue);
+  return resolveGameImageUrl(imageValue, { fieldName });
 }
 
 async function serializeGameResponse(game) {
   const gamePayload = typeof game.get === "function" ? game.get({ plain: true }) : { ...game };
-  gamePayload.image_url = await resolveStoredGameImageUrl(gamePayload.image_url);
+  const [imageUrl, backgroundUrl] = await Promise.all([
+    resolveStoredGameImageUrl(gamePayload.image_url),
+    resolveStoredGameImageUrl(gamePayload.background_url),
+  ]);
+  gamePayload.image_url = imageUrl;
+  gamePayload.background_url = backgroundUrl;
   return gamePayload;
 }
 
@@ -260,6 +265,9 @@ export async function createGame(req, res) {
   const gamesecretkey = normalizeOptionalGameSecretKey(readGameSecretKeyPayload(req.body));
   const description = req.body?.description ?? null;
   const imageUrl = await resolveGameImageUrl(req.body?.image_url ?? null);
+  const backgroundUrl = await resolveGameImageUrl(req.body?.background_url ?? null, {
+    fieldName: "background_url",
+  });
 
   const generatedSlug = await generateUniqueSlug(name);
 
@@ -272,6 +280,7 @@ export async function createGame(req, res) {
       gamesecretkey,
       description,
       image_url: imageUrl,
+      background_url: backgroundUrl,
       slug: generatedSlug,
     });
   } catch (error) {
@@ -310,6 +319,11 @@ export async function updateGame(req, res) {
   const nextGameSecretKey = normalizeOptionalGameSecretKey(readGameSecretKeyPayload(req.body));
   const nextDescription = req.body?.description;
   const nextImageUrl = await resolveGameImageUrlForUpdate(req.body?.image_url, game.image_url);
+  const nextBackgroundUrl = await resolveGameImageUrlForUpdate(
+    req.body?.background_url,
+    game.background_url,
+    "background_url",
+  );
 
   if (nextName !== undefined) {
     const normalizedNextName = normalizeRequiredGameName(
@@ -338,6 +352,9 @@ export async function updateGame(req, res) {
   }
   if (nextImageUrl !== undefined) {
     game.image_url = nextImageUrl;
+  }
+  if (nextBackgroundUrl !== undefined) {
+    game.background_url = nextBackgroundUrl;
   }
 
   try {

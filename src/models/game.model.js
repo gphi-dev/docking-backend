@@ -39,6 +39,10 @@ export const Game = sequelize.define(
       allowNull: false,
       unique: true,
     },
+    background_url: {
+      type: DataTypes.STRING(2048),
+      allowNull: true,
+    },
   },
   {
     tableName: "games",

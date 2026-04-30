@@ -36,7 +36,7 @@ This repository's Cloud Build deployment now sets `CORS_ORIGINS` for the fronten
 
 ## Production game image uploads
 
-Game image uploads are stored in S3. Send `image_url` as a base64
+Game image uploads are stored in S3. Send `image_url` or `background_url` as a base64
 `data:image/...;base64,...` value to `POST /api/games` or `PUT /api/games/:gameId`;
 the API stores the object under `images/` and returns the configured public S3 URL.
 
