@@ -20,7 +20,6 @@ const GAME_NAME_MAX_LENGTH = 255;
 const GAME_ID_MAX_LENGTH = 45;
 const GAME_URL_MAX_LENGTH = 255;
 const GAME_SECRET_KEY_MAX_LENGTH = 45;
-const GAME_IS_LANDSCAPE_DEFAULT = "False";
 
 function createBadRequestError(message) {
   const error = new Error(message);
@@ -103,35 +102,6 @@ function normalizeOptionalGameSecretKey(rawValue) {
   return normalizedGameSecretKey || null;
 }
 
-function normalizeOptionalIsLandscape(rawValue, defaultValue) {
-  if (rawValue === undefined) {
-    return defaultValue;
-  }
-
-  if (rawValue === null) {
-    return GAME_IS_LANDSCAPE_DEFAULT;
-  }
-
-  if (typeof rawValue === "boolean") {
-    return rawValue ? "True" : "False";
-  }
-
-  const normalizedIsLandscape = String(rawValue).trim().toLowerCase();
-  if (!normalizedIsLandscape) {
-    return GAME_IS_LANDSCAPE_DEFAULT;
-  }
-
-  if (normalizedIsLandscape === "true" || normalizedIsLandscape === "1") {
-    return "True";
-  }
-
-  if (normalizedIsLandscape === "false" || normalizedIsLandscape === "0") {
-    return "False";
-  }
-
-  throw createBadRequestError("is_landscape must be True or False");
-}
-
 function readGameSecretKeyPayload(body) {
   if (Object.prototype.hasOwnProperty.call(body ?? {}, "game_secret_key")) {
     return body.game_secret_key;
@@ -139,18 +109,6 @@ function readGameSecretKeyPayload(body) {
 
   if (Object.prototype.hasOwnProperty.call(body ?? {}, "gamesecretkey")) {
     return body.gamesecretkey;
-  }
-
-  return undefined;
-}
-
-function readIsLandscapePayload(body) {
-  if (Object.prototype.hasOwnProperty.call(body ?? {}, "is_landscape")) {
-    return body.is_landscape;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body ?? {}, "is_landscpae")) {
-    return body.is_landscpae;
   }
 
   return undefined;
@@ -194,7 +152,6 @@ async function serializeGameResponse(game) {
   ]);
   gamePayload.image_url = imageUrl;
   gamePayload.background_url = backgroundUrl;
-  gamePayload.is_landscape = gamePayload.is_landscape ?? GAME_IS_LANDSCAPE_DEFAULT;
   return gamePayload;
 }
 
@@ -307,10 +264,6 @@ export async function createGame(req, res) {
   const game_url = normalizeOptionalGameUrl(req.body?.game_url);
   const gamesecretkey = normalizeOptionalGameSecretKey(readGameSecretKeyPayload(req.body));
   const description = req.body?.description ?? null;
-  const is_landscape = normalizeOptionalIsLandscape(
-    readIsLandscapePayload(req.body),
-    GAME_IS_LANDSCAPE_DEFAULT,
-  );
   const imageUrl = await resolveGameImageUrl(req.body?.image_url ?? null);
   const backgroundUrl = await resolveGameImageUrl(req.body?.background_url ?? null, {
     fieldName: "background_url",
@@ -326,7 +279,6 @@ export async function createGame(req, res) {
       game_url,
       gamesecretkey,
       description,
-      is_landscape,
       image_url: imageUrl,
       background_url: backgroundUrl,
       slug: generatedSlug,
@@ -366,7 +318,6 @@ export async function updateGame(req, res) {
     : undefined;
   const nextGameSecretKey = normalizeOptionalGameSecretKey(readGameSecretKeyPayload(req.body));
   const nextDescription = req.body?.description;
-  const nextIsLandscape = normalizeOptionalIsLandscape(readIsLandscapePayload(req.body));
   const nextImageUrl = await resolveGameImageUrlForUpdate(req.body?.image_url, game.image_url);
   const nextBackgroundUrl = await resolveGameImageUrlForUpdate(
     req.body?.background_url,
@@ -398,9 +349,6 @@ export async function updateGame(req, res) {
   }
   if (nextDescription !== undefined) {
     game.description = nextDescription;
-  }
-  if (nextIsLandscape !== undefined) {
-    game.is_landscape = nextIsLandscape;
   }
   if (nextImageUrl !== undefined) {
     game.image_url = nextImageUrl;

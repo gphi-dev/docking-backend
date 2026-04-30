@@ -24,23 +24,15 @@ export async function hasGamesTableColumn(columnName) {
 }
 
 async function getGamesColumnSupport() {
-  const [
-    hasGameId,
-    hasGameUrl,
-    hasGameSecretKey,
-    hasSlug,
-    hasBackgroundUrl,
-    hasIsLandscape,
-  ] = await Promise.all([
+  const [hasGameId, hasGameUrl, hasGameSecretKey, hasSlug, hasBackgroundUrl] = await Promise.all([
     hasGamesTableColumn("game_id"),
     hasGamesTableColumn("game_url"),
     hasGamesTableColumn("gamesecretkey"),
     hasGamesTableColumn("slug"),
     hasGamesTableColumn("background_url"),
-    hasGamesTableColumn("is_landscape"),
   ]);
 
-  return { hasGameId, hasGameUrl, hasGameSecretKey, hasSlug, hasBackgroundUrl, hasIsLandscape };
+  return { hasGameId, hasGameUrl, hasGameSecretKey, hasSlug, hasBackgroundUrl };
 }
 
 function buildGameSelectColumns(columnSupport, options = {}) {
@@ -54,7 +46,6 @@ function buildGameSelectColumns(columnSupport, options = {}) {
     "games.description",
     "games.image_url",
     columnSupport.hasBackgroundUrl ? "games.background_url" : "NULL AS background_url",
-    columnSupport.hasIsLandscape ? "games.is_landscape" : "'False' AS is_landscape",
     "games.created_at",
   ];
 
@@ -94,10 +85,6 @@ function buildFeaturedGamesGroupBy(columnSupport) {
     groupByColumns.splice(groupByColumns.length - 1, 0, "games.background_url");
   }
 
-  if (columnSupport.hasIsLandscape) {
-    groupByColumns.splice(groupByColumns.length - 1, 0, "games.is_landscape");
-  }
-
   return groupByColumns;
 }
 
@@ -124,7 +111,6 @@ async function mapGameRecord(record, options = {}) {
     description: record.description ?? null,
     image_url: imageUrl,
     background_url: backgroundUrl,
-    is_landscape: record.is_landscape ?? "False",
     created_at: record.created_at,
     ...(includeTotalPlayers ? { total_players: Number(record.total_players ?? 0) } : {}),
   };
