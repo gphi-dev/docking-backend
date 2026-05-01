@@ -24,6 +24,8 @@ export function authenticateAdminJwt(req, res, next) {
     req.admin = {
       id: Number(decodedPayload.sub),
       username: String(decodedPayload.username),
+      email: decodedPayload.email ?? null,
+      role: decodedPayload.role ?? null,
     };
     return next();
   } catch (error) {

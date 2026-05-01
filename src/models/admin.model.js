@@ -14,6 +14,14 @@ export const Admin = sequelize.define(
       allowNull: false,
       unique: true,
     },
+    email: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    role: {
+      type: DataTypes.STRING(45),
+      allowNull: true,
+    },
     password_hash: {
       type: DataTypes.STRING(255),
       allowNull: false,

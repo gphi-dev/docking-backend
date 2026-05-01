@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { listAdmins, createAdminuser, updateAdminuser } from "../controllers/admins.controller.js";
+import {
+  createAdminuser,
+  deleteAdminuser,
+  listAdmins,
+  updateAdminuser,
+} from "../controllers/admins.controller.js";
 
 export const adminsRouter = Router();
 
@@ -12,3 +17,6 @@ adminsRouter.post("/", asyncHandler(createAdminuser));
 
 // PUT /api/admins/:id - updates an admin user by ID.
 adminsRouter.put("/:id", asyncHandler(updateAdminuser));
+
+// DELETE /api/admins/:id - deletes an admin user by ID.
+adminsRouter.delete("/:id", asyncHandler(deleteAdminuser));

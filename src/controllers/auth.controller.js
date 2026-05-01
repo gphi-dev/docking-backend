@@ -77,7 +77,11 @@ export const loginAdmin = asyncHandler(async (req, res) => {
 
     // 4. Generate Token
     const token = jwt.sign(
-      { username: adminRecord.username },
+      {
+        username: adminRecord.username,
+        email: adminRecord.email ?? null,
+        role: adminRecord.role ?? null,
+      },
       env.jwtSecret,
       {
         subject: String(adminRecord.id),
@@ -91,6 +95,8 @@ export const loginAdmin = asyncHandler(async (req, res) => {
       admin: {
         id: adminRecord.id,
         username: adminRecord.username,
+        email: adminRecord.email ?? null,
+        role: adminRecord.role ?? null,
       },
     });
   } catch (error) {
