@@ -49,23 +49,35 @@ export function createApp() {
 
   app.use(express.json({ limit: "1mb" }));
 
+  // GET /health - service health probe for uptime checks.
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
 
+  // /api/auth/* - public authentication routes mounted from authRouter.
   app.use("/api/auth", authRouter);
+
+  // GET /api/games - public game catalog used by client landing/game lists.
   app.get("/api/games", asyncHandler(listGames));
 
+  // /api/games/* - admin-protected game management routes.
   app.use("/api/games", authenticateAdminJwt, gamesRouter);
+
+  // /api/subscribers/* - admin-protected subscriber reporting routes.
   app.use("/api/subscribers", authenticateAdminJwt, subscribersRouter);
+
+  // /api/admins/* - admin-protected admin user management routes.
   app.use("/api/admins", authenticateAdminJwt, adminsRouter);
 
+  // /api/usermobile/* - public mobile user and score-list routes.
   app.use("/api/usermobile", usermobileRouter);
 
+  // Fallback for traceable 404 responses when no endpoint matches.
   app.use((req, res) => {
     res.status(404).json({ message: `Route not found: ${req.method} ${req.path}` });
   });
 
+  // Central error handler used by all asyncHandler-wrapped endpoints.
   app.use((error, _req, res, _next) => {
     console.error(error);
     const statusCode = Number(error.statusCode || error.status || 500);

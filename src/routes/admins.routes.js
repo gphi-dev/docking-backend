@@ -4,8 +4,11 @@ import { listAdmins, createAdminuser, updateAdminuser } from "../controllers/adm
 
 export const adminsRouter = Router();
 
+// GET /api/admins - lists admin users for admin management.
 adminsRouter.get("/", asyncHandler(listAdmins));
+
+// POST /api/admins - creates an admin user.
 adminsRouter.post("/", asyncHandler(createAdminuser));
 
-//PUT route
+// PUT /api/admins/:id - updates an admin user by ID.
 adminsRouter.put("/:id", asyncHandler(updateAdminuser));
