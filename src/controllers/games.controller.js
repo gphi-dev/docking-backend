@@ -172,6 +172,7 @@ async function serializeGameResponse(game) {
   ]);
   gamePayload.image_url = imageUrl;
   gamePayload.background_url = backgroundUrl;
+  gamePayload.is_landscape = gamePayload.is_landscape ?? DEFAULT_GAME_IS_LANDSCAPE;
   return gamePayload;
 }
 
