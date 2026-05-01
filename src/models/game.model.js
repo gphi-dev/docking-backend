@@ -26,6 +26,11 @@ export const Game = sequelize.define(
       type: DataTypes.STRING(45),
       allowNull: true,
     },
+    is_landscape: {
+      type: DataTypes.STRING(10),
+      allowNull: false,
+      defaultValue: "False",
+    },
     description: {
       type: DataTypes.TEXT,
       allowNull: true,

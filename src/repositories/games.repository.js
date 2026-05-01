@@ -24,15 +24,23 @@ export async function hasGamesTableColumn(columnName) {
 }
 
 async function getGamesColumnSupport() {
-  const [hasGameId, hasGameUrl, hasGameSecretKey, hasSlug, hasBackgroundUrl] = await Promise.all([
+  const [
+    hasGameId,
+    hasGameUrl,
+    hasGameSecretKey,
+    hasIsLandscape,
+    hasSlug,
+    hasBackgroundUrl,
+  ] = await Promise.all([
     hasGamesTableColumn("game_id"),
     hasGamesTableColumn("game_url"),
     hasGamesTableColumn("gamesecretkey"),
+    hasGamesTableColumn("is_landscape"),
     hasGamesTableColumn("slug"),
     hasGamesTableColumn("background_url"),
   ]);
 
-  return { hasGameId, hasGameUrl, hasGameSecretKey, hasSlug, hasBackgroundUrl };
+  return { hasGameId, hasGameUrl, hasGameSecretKey, hasIsLandscape, hasSlug, hasBackgroundUrl };
 }
 
 function buildGameSelectColumns(columnSupport, options = {}) {
@@ -43,6 +51,7 @@ function buildGameSelectColumns(columnSupport, options = {}) {
     columnSupport.hasGameUrl ? "games.game_url" : "NULL AS game_url",
     columnSupport.hasSlug ? "games.slug" : "NULL AS slug",
     "games.name",
+    columnSupport.hasIsLandscape ? "games.is_landscape" : "'False' AS is_landscape",
     "games.description",
     "games.image_url",
     columnSupport.hasBackgroundUrl ? "games.background_url" : "NULL AS background_url",
@@ -81,6 +90,10 @@ function buildFeaturedGamesGroupBy(columnSupport) {
     groupByColumns.splice(groupByColumns.length - 1, 0, "games.slug");
   }
 
+  if (columnSupport.hasIsLandscape) {
+    groupByColumns.splice(groupByColumns.length - 1, 0, "games.is_landscape");
+  }
+
   if (columnSupport.hasBackgroundUrl) {
     groupByColumns.splice(groupByColumns.length - 1, 0, "games.background_url");
   }
@@ -101,6 +114,7 @@ async function mapGameRecord(record, options = {}) {
     game_id: record.game_id ?? null,
     game_url: record.game_url ?? null,
     slug: record.slug ?? null,
+    is_landscape: record.is_landscape ?? "False",
     ...(includeGameSecretKey
       ? {
           gamesecretkey: record.gamesecretkey ?? null,
