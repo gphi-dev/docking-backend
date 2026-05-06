@@ -53,6 +53,32 @@ async function resolveAdminPermissions(adminRecord) {
   return serializeAllowedPermissionsFromRole(adminRecord.rbacRole);
 }
 
+async function findAdminForAuthById(adminId) {
+  return Admin.findByPk(adminId, {
+    include: ADMIN_AUTH_INCLUDE,
+  });
+}
+
+async function serializeAdminAuthPayload(adminRecord) {
+  const permissions = await resolveAdminPermissions(adminRecord);
+  const permissionKeys = isSuperAdminAdminRecord(adminRecord)
+    ? permissions.map((permission) => permission.action_key)
+    : serializeAllowedPermissionKeysFromRole(adminRecord.rbacRole);
+  const roleName = adminRecord.rbacRole?.name ?? adminRecord.role ?? null;
+
+  return {
+    id: adminRecord.id,
+    username: adminRecord.username,
+    email: adminRecord.email ?? null,
+    role: roleName,
+    role_id: serializeId(adminRecord.role_id),
+    status: adminRecord.status,
+    rbac_role: serializeRole(adminRecord.rbacRole),
+    permissions,
+    permission_keys: permissionKeys,
+  };
+}
+
 /**
  * @helper generateOTP
  * @description Generates a random 6-digit OTP for verification
@@ -154,21 +180,12 @@ export const loginAdmin = asyncHandler(async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials." });
     }
 
-    const permissions = await resolveAdminPermissions(adminRecord);
-    const permissionKeys = isSuperAdminAdminRecord(adminRecord)
-      ? permissions.map((permission) => permission.action_key)
-      : serializeAllowedPermissionKeysFromRole(adminRecord.rbacRole);
-    const roleName = adminRecord.rbacRole?.name ?? adminRecord.role ?? null;
+    const admin = await serializeAdminAuthPayload(adminRecord);
 
     // 4. Generate Token
     const token = jwt.sign(
       {
         username: adminRecord.username,
-        email: adminRecord.email ?? null,
-        role: roleName,
-        role_id: serializeId(adminRecord.role_id),
-        status: adminRecord.status,
-        permissions: permissionKeys,
       },
       env.jwtSecret,
       {
@@ -180,16 +197,7 @@ export const loginAdmin = asyncHandler(async (req, res) => {
     // 5. Send Response
     return res.status(200).json({
       token,
-      admin: {
-        id: adminRecord.id,
-        username: adminRecord.username,
-        email: adminRecord.email ?? null,
-        role: roleName,
-        role_id: serializeId(adminRecord.role_id),
-        status: adminRecord.status,
-        rbac_role: serializeRole(adminRecord.rbacRole),
-        permissions,
-      },
+      admin,
     });
   } catch (error) {
     // Specific fallback for uninitialized database tables during local development
@@ -202,6 +210,23 @@ export const loginAdmin = asyncHandler(async (req, res) => {
     // Let the asyncHandler catch anything else
     throw error;
   }
+});
+
+export const getCurrentAdmin = asyncHandler(async (req, res) => {
+  const adminRecord = await findAdminForAuthById(req.admin?.id);
+  if (!adminRecord) {
+    return res.status(401).json({ message: "Admin account no longer exists" });
+  }
+
+  if (adminRecord.status !== "active") {
+    return res.status(403).json({ message: "Admin account is inactive." });
+  }
+  if (adminRecord.rbacRole && !adminRecord.rbacRole.is_active) {
+    return res.status(403).json({ message: "Admin role is inactive." });
+  }
+
+  const admin = await serializeAdminAuthPayload(adminRecord);
+  return res.json({ admin });
 });
 
 /**
