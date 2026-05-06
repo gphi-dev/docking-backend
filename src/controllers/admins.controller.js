@@ -1,30 +1,47 @@
-import { Admin } from "../models/index.js";
+import { Op } from "sequelize";
+import { Admin, Role } from "../models/index.js";
 import { hashPassword } from "../utils/password.js";
+import {
+  isSuperAdminAdminRecord,
+  isSuperAdminRoleRecord,
+  isSuperAdminRoleValue,
+  serializeId,
+  serializeRole,
+  SUPER_ADMIN_ROLE_NAME,
+} from "../utils/rbac.js";
 
 const ADMIN_USERNAME_MAX_LENGTH = 64;
 const ADMIN_EMAIL_MAX_LENGTH = 100;
 const ADMIN_ROLE_MAX_LENGTH = 45;
-const SUPER_ADMIN_ROLE = "super admin";
-const LAST_SUPER_ADMIN_MESSAGE = "At least one Super Admin account is required.";
+const ADMIN_STATUS_VALUES = new Set(["active", "inactive"]);
+const LAST_SUPER_ADMIN_MESSAGE = "At least one active Super Admin account is required.";
+
+const ADMIN_ROLE_INCLUDE = [
+  {
+    model: Role,
+    as: "rbacRole",
+    attributes: ["id", "name", "slug", "description", "is_active", "created_at", "updated_at"],
+  },
+];
+
+function createBadRequestError(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+}
 
 function normalizeRequiredString(rawValue, fieldName, maxLength) {
   if (typeof rawValue !== "string") {
-    const error = new Error(`${fieldName} is required.`);
-    error.status = 400;
-    throw error;
+    throw createBadRequestError(`${fieldName} is required.`);
   }
 
   const normalizedValue = rawValue.trim();
   if (!normalizedValue) {
-    const error = new Error(`${fieldName} is required.`);
-    error.status = 400;
-    throw error;
+    throw createBadRequestError(`${fieldName} is required.`);
   }
 
   if (normalizedValue.length > maxLength) {
-    const error = new Error(`${fieldName} must be ${maxLength} characters or less.`);
-    error.status = 400;
-    throw error;
+    throw createBadRequestError(`${fieldName} must be ${maxLength} characters or less.`);
   }
 
   return normalizedValue;
@@ -41,71 +58,188 @@ function normalizeOptionalString(rawValue, fieldName, maxLength) {
 
   const normalizedValue = String(rawValue).trim();
   if (normalizedValue.length > maxLength) {
-    const error = new Error(`${fieldName} must be ${maxLength} characters or less.`);
-    error.status = 400;
-    throw error;
+    throw createBadRequestError(`${fieldName} must be ${maxLength} characters or less.`);
   }
 
   return normalizedValue || null;
 }
 
-function parseAdminId(rawValue) {
-  const adminId = Number(rawValue);
-  if (!Number.isInteger(adminId) || adminId < 1) {
-    const error = new Error("Invalid admin id.");
-    error.status = 400;
-    throw error;
+function normalizeOptionalStatus(rawValue) {
+  if (rawValue === undefined) {
+    return undefined;
   }
 
-  return adminId;
+  const normalizedStatus = String(rawValue).trim().toLowerCase();
+  if (!ADMIN_STATUS_VALUES.has(normalizedStatus)) {
+    throw createBadRequestError("Status must be either active or inactive.");
+  }
+
+  return normalizedStatus;
 }
 
-function isSuperAdminRole(role) {
-  return typeof role === "string" && role.trim().toLowerCase() === SUPER_ADMIN_ROLE;
+function parsePositiveInteger(rawValue, fieldName) {
+  const parsedValue = Number(rawValue);
+  if (!Number.isInteger(parsedValue) || parsedValue < 1) {
+    throw createBadRequestError(`Invalid ${fieldName}.`);
+  }
+
+  return parsedValue;
 }
 
-async function countSuperAdmins() {
+function parseAdminId(rawValue) {
+  return parsePositiveInteger(rawValue, "admin id");
+}
+
+function slugifyRoleName(rawValue) {
+  return String(rawValue)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+async function findRoleByNameOrSlug(rawRoleValue) {
+  const normalizedRoleValue = String(rawRoleValue ?? "").trim();
+  if (!normalizedRoleValue) {
+    return null;
+  }
+
+  const slug = slugifyRoleName(normalizedRoleValue);
+  return Role.findOne({
+    where: {
+      [Op.or]: [
+        { name: normalizedRoleValue },
+        { slug: normalizedRoleValue },
+        { slug },
+      ],
+    },
+  });
+}
+
+async function findDefaultAdminRole() {
+  const adminRoleBySlug = await Role.findOne({ where: { slug: "admin", is_active: true } });
+  if (adminRoleBySlug) {
+    return adminRoleBySlug;
+  }
+
+  const adminRoleByName = await Role.findOne({ where: { name: "Admin", is_active: true } });
+  if (adminRoleByName) {
+    return adminRoleByName;
+  }
+
+  return Role.findOne({ where: { is_active: true }, order: [["id", "ASC"]] });
+}
+
+async function resolveRoleForPayload(body, options = {}) {
+  const { required = false } = options;
+  const hasRoleId = Object.prototype.hasOwnProperty.call(body ?? {}, "role_id");
+  const hasLegacyRole = Object.prototype.hasOwnProperty.call(body ?? {}, "role");
+
+  if (hasRoleId && body.role_id !== undefined && body.role_id !== null && String(body.role_id).trim() !== "") {
+    const roleId = parsePositiveInteger(body.role_id, "role id");
+    const roleRecord = await Role.findByPk(roleId);
+    if (!roleRecord) {
+      throw createBadRequestError("Role not found.");
+    }
+    if (!roleRecord.is_active) {
+      throw createBadRequestError("Role is inactive.");
+    }
+    return roleRecord;
+  }
+
+  if (hasLegacyRole && body.role !== undefined && body.role !== null && String(body.role).trim() !== "") {
+    const roleRecord = await findRoleByNameOrSlug(body.role);
+    if (!roleRecord) {
+      throw createBadRequestError("Role not found.");
+    }
+    if (!roleRecord.is_active) {
+      throw createBadRequestError("Role is inactive.");
+    }
+    return roleRecord;
+  }
+
+  if (!required) {
+    return undefined;
+  }
+
+  const defaultRole = await findDefaultAdminRole();
+  if (!defaultRole) {
+    throw createBadRequestError("A role_id is required.");
+  }
+
+  return defaultRole;
+}
+
+async function findAdminByIdWithRole(id) {
+  return Admin.findByPk(id, { include: ADMIN_ROLE_INCLUDE });
+}
+
+async function countActiveSuperAdmins() {
   const admins = await Admin.findAll({
-    attributes: ["id", "role"],
+    attributes: ["id", "role", "role_id", "status"],
+    include: ADMIN_ROLE_INCLUDE,
   });
 
-  return admins.filter((adminRecord) => isSuperAdminRole(adminRecord.role)).length;
+  return admins.filter((adminRecord) => (
+    adminRecord.status === "active" && isSuperAdminAdminRecord(adminRecord)
+  )).length;
 }
 
-async function isLastSuperAdminAccount() {
-  const superAdminCount = await countSuperAdmins();
+async function isLastActiveSuperAdminAccount() {
+  const superAdminCount = await countActiveSuperAdmins();
   return superAdminCount <= 1;
 }
 
 function serializeAdmin(adminRecord) {
+  const roleRecord = adminRecord.rbacRole ?? null;
+  const displayRole = adminRecord.role ?? roleRecord?.name ?? null;
+
   return {
     id: adminRecord.id,
     username: adminRecord.username,
     email: adminRecord.email ?? null,
-    role: adminRecord.role ?? null,
+    role: displayRole,
+    role_id: serializeId(adminRecord.role_id),
+    status: adminRecord.status ?? "active",
+    rbac_role: serializeRole(roleRecord),
     created_at: adminRecord.created_at ?? adminRecord.createdAt ?? null,
+    updated_at: adminRecord.updated_at ?? adminRecord.updatedAt ?? null,
   };
+}
+
+function willRemainActiveSuperAdmin(adminRecord, nextRoleRecord, nextStatus) {
+  const roleAfterUpdate = nextRoleRecord ?? adminRecord.rbacRole ?? null;
+  const statusAfterUpdate = nextStatus ?? adminRecord.status ?? "active";
+
+  if (roleAfterUpdate) {
+    return statusAfterUpdate === "active" && isSuperAdminRoleRecord(roleAfterUpdate);
+  }
+
+  return statusAfterUpdate === "active" && isSuperAdminRoleValue(adminRecord.role);
 }
 
 export async function listAdmins(_req, res) {
   const admins = await Admin.findAll({
-    attributes: ["id", "username", "email", "role", "created_at"],
+    attributes: ["id", "username", "email", "role", "role_id", "status", "created_at", "updated_at"],
+    include: ADMIN_ROLE_INCLUDE,
     order: [["created_at", "ASC"]],
   });
-  return res.json(admins);
+  return res.json(admins.map((adminRecord) => serializeAdmin(adminRecord)));
 }
 
 /**
  * @controller createAdminuser
  * @description Creates a new admin user
  * @route POST /api/admins
- * @access Private (Should be protected by auth middleware in production)
+ * @access Private
  */
 export async function createAdminuser(req, res) {
   const username = normalizeRequiredString(req.body?.username, "Username", ADMIN_USERNAME_MAX_LENGTH);
   const password = req.body?.password;
   const email = normalizeOptionalString(req.body?.email, "Email", ADMIN_EMAIL_MAX_LENGTH);
-  const role = normalizeOptionalString(req.body?.role, "Role", ADMIN_ROLE_MAX_LENGTH);
+  const legacyRole = normalizeOptionalString(req.body?.role, "Role", ADMIN_ROLE_MAX_LENGTH);
+  const status = normalizeOptionalStatus(req.body?.status) ?? "active";
+  const roleRecord = await resolveRoleForPayload(req.body, { required: true });
 
   if (typeof password !== "string" || !password.trim()) {
     return res.status(400).json({ message: "Username and password are required." });
@@ -121,11 +255,14 @@ export async function createAdminuser(req, res) {
   const newAdmin = await Admin.create({
     username,
     email,
-    role,
+    role: legacyRole ?? roleRecord.name ?? SUPER_ADMIN_ROLE_NAME,
+    role_id: roleRecord.id,
+    status,
     password_hash,
   });
 
-  return res.status(201).json(serializeAdmin(newAdmin));
+  const createdAdmin = await findAdminByIdWithRole(newAdmin.id);
+  return res.status(201).json(serializeAdmin(createdAdmin));
 }
 
 /**
@@ -140,20 +277,22 @@ export async function updateAdminuser(req, res) {
     ? normalizeRequiredString(req.body.username, "Username", ADMIN_USERNAME_MAX_LENGTH)
     : undefined;
   const nextEmail = normalizeOptionalString(req.body?.email, "Email", ADMIN_EMAIL_MAX_LENGTH);
-  const nextRole = normalizeOptionalString(req.body?.role, "Role", ADMIN_ROLE_MAX_LENGTH);
+  const nextLegacyRole = normalizeOptionalString(req.body?.role, "Role", ADMIN_ROLE_MAX_LENGTH);
+  const nextStatus = normalizeOptionalStatus(req.body?.status);
+  const nextRoleRecord = await resolveRoleForPayload(req.body, { required: false });
   const password = req.body?.password;
 
-  const adminRecord = await Admin.findByPk(id);
+  const adminRecord = await findAdminByIdWithRole(id);
   if (!adminRecord) {
     return res.status(404).json({ message: "Admin user not found." });
   }
 
   if (
-    nextRole !== undefined &&
-    !isSuperAdminRole(nextRole) &&
-    isSuperAdminRole(adminRecord.role)
+    adminRecord.status === "active" &&
+    isSuperAdminAdminRecord(adminRecord) &&
+    !willRemainActiveSuperAdmin(adminRecord, nextRoleRecord, nextStatus)
   ) {
-    if (await isLastSuperAdminAccount()) {
+    if (await isLastActiveSuperAdminAccount()) {
       return res.status(409).json({ message: LAST_SUPER_ADMIN_MESSAGE });
     }
   }
@@ -169,8 +308,14 @@ export async function updateAdminuser(req, res) {
   if (nextEmail !== undefined) {
     adminRecord.email = nextEmail;
   }
-  if (nextRole !== undefined) {
-    adminRecord.role = nextRole;
+  if (nextRoleRecord !== undefined) {
+    adminRecord.role_id = nextRoleRecord.id;
+    adminRecord.role = nextLegacyRole ?? nextRoleRecord.name;
+  } else if (nextLegacyRole !== undefined) {
+    adminRecord.role = nextLegacyRole;
+  }
+  if (nextStatus !== undefined) {
+    adminRecord.status = nextStatus;
   }
 
   if (password !== undefined) {
@@ -182,7 +327,8 @@ export async function updateAdminuser(req, res) {
 
   await adminRecord.save();
 
-  return res.status(200).json(serializeAdmin(adminRecord));
+  const updatedAdmin = await findAdminByIdWithRole(id);
+  return res.status(200).json(serializeAdmin(updatedAdmin));
 }
 
 /**
@@ -194,13 +340,13 @@ export async function updateAdminuser(req, res) {
 export async function deleteAdminuser(req, res) {
   const id = parseAdminId(req.params.id);
 
-  const adminRecord = await Admin.findByPk(id);
+  const adminRecord = await findAdminByIdWithRole(id);
   if (!adminRecord) {
     return res.status(404).json({ message: "Admin user not found." });
   }
 
-  if (isSuperAdminRole(adminRecord.role)) {
-    if (await isLastSuperAdminAccount()) {
+  if (adminRecord.status === "active" && isSuperAdminAdminRecord(adminRecord)) {
+    if (await isLastActiveSuperAdminAccount()) {
       return res.status(409).json({ message: LAST_SUPER_ADMIN_MESSAGE });
     }
   }

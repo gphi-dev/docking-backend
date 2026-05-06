@@ -7,6 +7,7 @@ import { listGames } from "./controllers/games.controller.js";
 import { subscribersRouter } from "./routes/subscribers.routes.js";
 import { adminsRouter } from "./routes/admins.routes.js";
 import { usermobileRouter } from "./routes/usermobile.routes.js";
+import { rbacRouter } from "./routes/rbac.routes.js";
 import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
 
@@ -68,6 +69,9 @@ export function createApp() {
 
   // /api/admins/* - admin-protected admin user management routes.
   app.use("/api/admins", authenticateAdminJwt, adminsRouter);
+
+  // /api/rbac/* - admin-protected role and permission management routes.
+  app.use("/api/rbac", authenticateAdminJwt, rbacRouter);
 
   // /api/usermobile/* - public mobile user and score-list routes.
   app.use("/api/usermobile", usermobileRouter);
