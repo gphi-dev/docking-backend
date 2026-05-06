@@ -9,7 +9,6 @@ import { adminsRouter } from "./routes/admins.routes.js";
 import { usermobileRouter } from "./routes/usermobile.routes.js";
 import { rbacRouter } from "./routes/rbac.routes.js";
 import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
-import { requireAdminPermission } from "./middleware/requireAdminPermission.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
 
 export function createApp() {
@@ -59,13 +58,8 @@ export function createApp() {
   // /api/auth/* - public authentication routes mounted from authRouter.
   app.use("/api/auth", authRouter);
 
-  // GET /api/games - protected game catalog used by admin game management.
-  app.get(
-    "/api/games",
-    authenticateAdminJwt,
-    requireAdminPermission("games.view"),
-    asyncHandler(listGames),
-  );
+  // GET /api/games - public game catalog used by client landing/game lists.
+  app.get("/api/games", asyncHandler(listGames));
 
   // /api/games/* - admin-protected game management routes.
   app.use("/api/games", authenticateAdminJwt, gamesRouter);
@@ -79,8 +73,8 @@ export function createApp() {
   // /api/rbac/* - admin-protected role and permission management routes.
   app.use("/api/rbac", authenticateAdminJwt, rbacRouter);
 
-  // /api/usermobile/* - admin-protected mobile user and score-list routes.
-  app.use("/api/usermobile", authenticateAdminJwt, usermobileRouter);
+  // /api/usermobile/* - public mobile user and score-list routes.
+  app.use("/api/usermobile", usermobileRouter);
 
   // Fallback for traceable 404 responses when no endpoint matches.
   app.use((req, res) => {
