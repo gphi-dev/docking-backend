@@ -1,6 +1,5 @@
 import {
   isSuperAdminRoleRecord,
-  isSuperAdminRoleValue,
 } from "../utils/rbac.js";
 
 function hasRequiredPermission(admin, permissionKey) {
@@ -8,7 +7,7 @@ function hasRequiredPermission(admin, permissionKey) {
     return true;
   }
 
-  if (isSuperAdminRoleRecord(admin?.rbac_role) || isSuperAdminRoleValue(admin?.role)) {
+  if (isSuperAdminRoleRecord(admin?.rbac_role)) {
     return true;
   }
 

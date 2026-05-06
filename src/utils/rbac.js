@@ -38,10 +38,15 @@ export function isSuperAdminRoleRecord(roleRecord) {
 }
 
 export function isSuperAdminAdminRecord(adminRecord) {
-  return (
-    isSuperAdminRoleRecord(adminRecord?.rbacRole) ||
-    isSuperAdminRoleValue(adminRecord?.role)
-  );
+  if (!adminRecord) {
+    return false;
+  }
+
+  if (adminRecord.rbacRole !== undefined || adminRecord.role_id !== undefined) {
+    return isSuperAdminRoleRecord(adminRecord.rbacRole);
+  }
+
+  return isSuperAdminRoleValue(adminRecord.role);
 }
 
 export function serializeRole(roleRecord) {

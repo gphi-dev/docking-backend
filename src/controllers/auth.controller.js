@@ -158,7 +158,7 @@ export const loginAdmin = asyncHandler(async (req, res) => {
     const permissionKeys = isSuperAdminAdminRecord(adminRecord)
       ? permissions.map((permission) => permission.action_key)
       : serializeAllowedPermissionKeysFromRole(adminRecord.rbacRole);
-    const roleName = adminRecord.role ?? adminRecord.rbacRole?.name ?? null;
+    const roleName = adminRecord.rbacRole?.name ?? adminRecord.role ?? null;
 
     // 4. Generate Token
     const token = jwt.sign(

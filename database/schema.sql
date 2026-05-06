@@ -44,7 +44,9 @@ VALUES
   ('Admin Users', 'Update admins', 'admins.update', '/api/admins/:id', 'PUT', 'Update admin users and roles.'),
   ('Admin Users', 'Delete admins', 'admins.delete', '/api/admins/:id', 'DELETE', 'Delete admin users.'),
   ('Subscribers', 'View subscribers', 'subscribers.view', '/api/usermobile', 'GET', 'List subscriber mobile records.'),
+  ('Subscribers', 'Create subscribers', 'subscribers.create', '/api/usermobile', 'POST', 'Create subscriber mobile records.'),
   ('Subscribers', 'View subscribers by game', 'subscribers.view_by_game', '/api/usermobile/games/:gameId', 'GET', 'Open subscriber records for a selected game.'),
+  ('Subscribers', 'View score lists', 'subscribers.view_scores', '/api/usermobile/masked/*', 'GET,POST', 'Open masked score lists and top scorer records.'),
   ('Subscribers', 'View game subscribers', 'subscribers.view_game_subscribers', '/api/subscribers/games/:gameId', 'GET', 'Open paginated game subscriber records.'),
   ('RBAC', 'Manage RBAC', 'rbac.manage', '/api/rbac', 'PUT', 'Assign backend permissions to roles.')
 ON DUPLICATE KEY UPDATE
@@ -150,7 +152,9 @@ SELECT roles.id, permissions.id,
       'games.create',
       'games.update',
       'subscribers.view',
+      'subscribers.create',
       'subscribers.view_by_game',
+      'subscribers.view_scores',
       'subscribers.view_game_subscribers'
     ) THEN 1
     ELSE 0

@@ -87,7 +87,7 @@ export async function authenticateAdminJwt(req, res, next) {
       id: Number(adminRecord.id),
       username: adminRecord.username,
       email: adminRecord.email ?? null,
-      role: adminRecord.role ?? adminRecord.rbacRole?.name ?? null,
+      role: adminRecord.rbacRole?.name ?? adminRecord.role ?? null,
       role_id: serializeId(adminRecord.role_id),
       status: adminRecord.status,
       rbac_role: serializeRole(adminRecord.rbacRole),

@@ -192,7 +192,7 @@ async function isLastActiveSuperAdminAccount() {
 
 function serializeAdmin(adminRecord) {
   const roleRecord = adminRecord.rbacRole ?? null;
-  const displayRole = adminRecord.role ?? roleRecord?.name ?? null;
+  const displayRole = roleRecord?.name ?? adminRecord.role ?? null;
 
   return {
     id: adminRecord.id,
@@ -213,6 +213,10 @@ function willRemainActiveSuperAdmin(adminRecord, nextRoleRecord, nextStatus) {
 
   if (roleAfterUpdate) {
     return statusAfterUpdate === "active" && isSuperAdminRoleRecord(roleAfterUpdate);
+  }
+
+  if (adminRecord.role_id !== undefined) {
+    return false;
   }
 
   return statusAfterUpdate === "active" && isSuperAdminRoleValue(adminRecord.role);
