@@ -4,6 +4,8 @@ import { hashPassword } from "../utils/password.js";
 const ADMIN_USERNAME_MAX_LENGTH = 64;
 const ADMIN_EMAIL_MAX_LENGTH = 100;
 const ADMIN_ROLE_MAX_LENGTH = 45;
+const SUPER_ADMIN_ROLE = "super admin";
+const LAST_SUPER_ADMIN_MESSAGE = "At least one Super Admin account is required.";
 
 function normalizeRequiredString(rawValue, fieldName, maxLength) {
   if (typeof rawValue !== "string") {
@@ -56,6 +58,23 @@ function parseAdminId(rawValue) {
   }
 
   return adminId;
+}
+
+function isSuperAdminRole(role) {
+  return typeof role === "string" && role.trim().toLowerCase() === SUPER_ADMIN_ROLE;
+}
+
+async function countSuperAdmins() {
+  const admins = await Admin.findAll({
+    attributes: ["id", "role"],
+  });
+
+  return admins.filter((adminRecord) => isSuperAdminRole(adminRecord.role)).length;
+}
+
+async function isLastSuperAdminAccount() {
+  const superAdminCount = await countSuperAdmins();
+  return superAdminCount <= 1;
 }
 
 function serializeAdmin(adminRecord) {
@@ -129,6 +148,16 @@ export async function updateAdminuser(req, res) {
     return res.status(404).json({ message: "Admin user not found." });
   }
 
+  if (
+    nextRole !== undefined &&
+    !isSuperAdminRole(nextRole) &&
+    isSuperAdminRole(adminRecord.role)
+  ) {
+    if (await isLastSuperAdminAccount()) {
+      return res.status(409).json({ message: LAST_SUPER_ADMIN_MESSAGE });
+    }
+  }
+
   if (nextUsername !== undefined && nextUsername !== adminRecord.username) {
     const existingAdmin = await Admin.findOne({ where: { username: nextUsername } });
     if (existingAdmin) {
@@ -168,6 +197,12 @@ export async function deleteAdminuser(req, res) {
   const adminRecord = await Admin.findByPk(id);
   if (!adminRecord) {
     return res.status(404).json({ message: "Admin user not found." });
+  }
+
+  if (isSuperAdminRole(adminRecord.role)) {
+    if (await isLastSuperAdminAccount()) {
+      return res.status(409).json({ message: LAST_SUPER_ADMIN_MESSAGE });
+    }
   }
 
   await adminRecord.destroy();
