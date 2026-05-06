@@ -22,6 +22,15 @@ export const Admin = sequelize.define(
       type: DataTypes.STRING(45),
       allowNull: true,
     },
+    role_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: false,
+    },
+    status: {
+      type: DataTypes.ENUM("active", "inactive"),
+      allowNull: false,
+      defaultValue: "active",
+    },
     password_hash: {
       type: DataTypes.STRING(255),
       allowNull: false,
@@ -29,9 +38,8 @@ export const Admin = sequelize.define(
   },
   {
     tableName: "admins",
-    // ADD THESE LINES TO FIX THE CRASH:
     timestamps: true,
-    createdAt: "created_at", // Maps Sequelize's createdAt to your DB's created_at
-    updatedAt: false,        // Tells Sequelize not to look for an updatedAt column
+    createdAt: "created_at",
+    updatedAt: "updated_at",
   }
 );

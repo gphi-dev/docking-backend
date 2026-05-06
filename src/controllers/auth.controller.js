@@ -1,8 +1,57 @@
 import jwt from "jsonwebtoken";
-import { Admin } from "../models/index.js";
+import { Admin, Permission, Role, RolePermission, Usermobile } from "../models/index.js";
 import { env } from "../config/env.js";
 import { verifyPassword } from "../utils/password.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import {
+  isSuperAdminAdminRecord,
+  serializeAllowedPermissionKeysFromRole,
+  serializeAllowedPermissionsFromRole,
+  serializeId,
+  serializePermission,
+  serializeRole,
+} from "../utils/rbac.js";
+
+const ADMIN_AUTH_INCLUDE = [
+  {
+    model: Role,
+    as: "rbacRole",
+    attributes: ["id", "name", "slug", "description", "is_active", "created_at", "updated_at"],
+    include: [
+      {
+        model: RolePermission,
+        as: "rolePermissions",
+        attributes: ["id", "permission_id", "is_allowed"],
+        include: [
+          {
+            model: Permission,
+            as: "permission",
+            attributes: [
+              "id",
+              "access_group",
+              "action_name",
+              "action_key",
+              "endpoint",
+              "method",
+              "description",
+              "created_at",
+              "updated_at",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+async function resolveAdminPermissions(adminRecord) {
+  if (isSuperAdminAdminRecord(adminRecord)) {
+    const permissions = await Permission.findAll({ order: [["access_group", "ASC"], ["action_name", "ASC"]] });
+    return permissions.map((permissionRecord) => serializePermission(permissionRecord));
+  }
+
+  return serializeAllowedPermissionsFromRole(adminRecord.rbacRole);
+}
 
 /**
  * @helper generateOTP
@@ -24,6 +73,26 @@ function parsePoints(rawValue) {
   }
 
   return points;
+}
+
+function parseIsVerified(rawValue) {
+  if (rawValue === undefined || rawValue === null || String(rawValue).trim() === "") {
+    return 0;
+  }
+
+  if (typeof rawValue === "boolean") {
+    return rawValue ? 1 : 0;
+  }
+
+  const normalizedValue = String(rawValue).trim().toLowerCase();
+  if (["1", "true", "yes", "verified"].includes(normalizedValue)) {
+    return 1;
+  }
+  if (["0", "false", "no", "unverified"].includes(normalizedValue)) {
+    return 0;
+  }
+
+  return null;
 }
 
 /**
@@ -64,9 +133,19 @@ export const loginAdmin = asyncHandler(async (req, res) => {
 
   try {
     // 2. Fetch Admin Record
-    const adminRecord = await Admin.findOne({ where: { username } });
+    const adminRecord = await Admin.findOne({
+      where: { username },
+      include: ADMIN_AUTH_INCLUDE,
+    });
     if (!adminRecord) {
       return res.status(401).json({ message: "Invalid credentials." });
+    }
+
+    if (adminRecord.status !== "active") {
+      return res.status(403).json({ message: "Admin account is inactive." });
+    }
+    if (adminRecord.rbacRole && !adminRecord.rbacRole.is_active) {
+      return res.status(403).json({ message: "Admin role is inactive." });
     }
 
     // 3. Verify Password
@@ -75,12 +154,21 @@ export const loginAdmin = asyncHandler(async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials." });
     }
 
+    const permissions = await resolveAdminPermissions(adminRecord);
+    const permissionKeys = isSuperAdminAdminRecord(adminRecord)
+      ? permissions.map((permission) => permission.action_key)
+      : serializeAllowedPermissionKeysFromRole(adminRecord.rbacRole);
+    const roleName = adminRecord.rbacRole?.name ?? adminRecord.role ?? null;
+
     // 4. Generate Token
     const token = jwt.sign(
       {
         username: adminRecord.username,
         email: adminRecord.email ?? null,
-        role: adminRecord.role ?? null,
+        role: roleName,
+        role_id: serializeId(adminRecord.role_id),
+        status: adminRecord.status,
+        permissions: permissionKeys,
       },
       env.jwtSecret,
       {
@@ -96,13 +184,17 @@ export const loginAdmin = asyncHandler(async (req, res) => {
         id: adminRecord.id,
         username: adminRecord.username,
         email: adminRecord.email ?? null,
-        role: adminRecord.role ?? null,
+        role: roleName,
+        role_id: serializeId(adminRecord.role_id),
+        status: adminRecord.status,
+        rbac_role: serializeRole(adminRecord.rbacRole),
+        permissions,
       },
     });
   } catch (error) {
     // Specific fallback for uninitialized database tables during local development
     const mysqlErrorCode = error?.parent?.code || error?.original?.code;
-    if (mysqlErrorCode === "ER_NO_SUCH_TABLE") {
+    if (mysqlErrorCode === "ER_NO_SUCH_TABLE" || mysqlErrorCode === "ER_BAD_FIELD_ERROR") {
       return res.status(503).json({
         message: "Database tables are missing. From the backend folder run: npm run db:schema && npm run db:seed-admin",
       });
@@ -117,13 +209,11 @@ export const loginAdmin = asyncHandler(async (req, res) => {
  * @route POST /api/auth/game-login
  * @access Public
  */
-
-import { Usermobile } from "../models/usermobile.model.js";
-
 export async function createOtpSession(req, res) {
   let phone = req.body?.phone;
   const game_id = req.body?.game_id;
   const points = parsePoints(req.body?.points);
+  const isVerified = parseIsVerified(req.body?.is_verified);
   // Initial existence checks
   if (!phone) {
     return res.status(400).json({ 
@@ -146,6 +236,14 @@ export async function createOtpSession(req, res) {
       success: false,
       errorCode: "ERR_INVALID_POINTS",
       message: "points must be a valid integer"
+    });
+  }
+
+  if (isVerified === null) {
+    return res.status(400).json({
+      success: false,
+      errorCode: "ERR_INVALID_IS_VERIFIED",
+      message: "is_verified must be 1, 0, true, or false"
     });
   }
 
@@ -202,8 +300,8 @@ export async function createOtpSession(req, res) {
     const createdSession = await Usermobile.create({
       phone: phone, // Saves the transformed 10-digit number
       game_id: game_id,
-      is_verified: 0, 
-      verified_at: null,
+      is_verified: isVerified,
+      verified_at: isVerified ? new Date() : null,
       otp: otpCode,
       otp_expires_at: expiresAt,
       points: points,
@@ -215,7 +313,8 @@ export async function createOtpSession(req, res) {
     const tokenPayload = {
       sessionId: createdSession.id,
       phone: createdSession.phone,
-      game_id: createdSession.game_id
+      game_id: createdSession.game_id,
+      is_verified: createdSession.is_verified
     };
 
     const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '5m' });
@@ -227,7 +326,8 @@ export async function createOtpSession(req, res) {
       data: [
         {
           game_id: createdSession.game_id,
-          points: createdSession.points
+          points: createdSession.points,
+          is_verified: createdSession.is_verified
         }
       ],
       token: token                
