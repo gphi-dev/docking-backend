@@ -15,6 +15,8 @@ const PERMISSION_ACTION_NAME_MAX_LENGTH = 150;
 const PERMISSION_ACTION_KEY_MAX_LENGTH = 150;
 const PERMISSION_ENDPOINT_MAX_LENGTH = 255;
 const PERMISSION_METHOD_MAX_LENGTH = 20;
+const ADMIN_ROLE_SLUG = "admin";
+const RBAC_MANAGE_PERMISSION_KEY = "rbac.manage";
 
 const ROLE_PERMISSION_INCLUDE = [
   {
@@ -157,6 +159,22 @@ function serializeRolePermission(rolePermissionRecord) {
     updated_at: rolePermissionRecord.updated_at ?? rolePermissionRecord.updatedAt ?? null,
     permission: serializePermission(rolePermissionRecord.permission),
   };
+}
+
+function isDefaultAdminRoleRecord(roleRecord) {
+  const roleSlug = String(roleRecord?.slug || "").trim().toLowerCase();
+  const roleName = String(roleRecord?.name || "").trim().toLowerCase();
+  return roleSlug === ADMIN_ROLE_SLUG || roleName === ADMIN_ROLE_SLUG;
+}
+
+function assertAdminCannotManageRbac(roleRecord, allowedPermissionKeys) {
+  if (!isDefaultAdminRoleRecord(roleRecord)) {
+    return;
+  }
+
+  if (allowedPermissionKeys.includes(RBAC_MANAGE_PERMISSION_KEY)) {
+    throw createHttpError("Admin role cannot be allowed to manage RBAC.", 409);
+  }
 }
 
 function serializeRbacRole(roleRecord, allPermissions = []) {
@@ -535,6 +553,7 @@ export async function updateRolePermissions(req, res) {
     && rawPermissionKeyList.every((permissionKey) => typeof permissionKey === "string");
   const allowedPermissionKeys = normalizePermissionKeys(rawPermissionKeyList);
   if (Array.isArray(req.body?.allowed_permission_keys) || Array.isArray(req.body?.permission_keys) || isPermissionKeyList) {
+    assertAdminCannotManageRbac(roleRecord, allowedPermissionKeys);
     await updateRolePermissionKeys(roleId, allowedPermissionKeys);
     return res.json(await buildRolePermissionsPayload(roleId));
   }
@@ -545,10 +564,18 @@ export async function updateRolePermissions(req, res) {
   }
 
   const permissionIds = [...new Set(rolePermissionUpdates.map((update) => update.permission_id))];
-  const existingPermissionCount = await Permission.count({ where: { id: { [Op.in]: permissionIds } } });
-  if (existingPermissionCount !== permissionIds.length) {
+  const existingPermissions = await Permission.findAll({ where: { id: { [Op.in]: permissionIds } } });
+  if (existingPermissions.length !== permissionIds.length) {
     throw createHttpError("One or more permissions were not found.");
   }
+  const permissionKeyById = new Map(
+    existingPermissions.map((permissionRecord) => [String(permissionRecord.id), permissionRecord.action_key]),
+  );
+  const requestedAllowedPermissionKeys = rolePermissionUpdates
+    .filter((rolePermissionUpdate) => rolePermissionUpdate.is_allowed)
+    .map((rolePermissionUpdate) => permissionKeyById.get(String(rolePermissionUpdate.permission_id)))
+    .filter(Boolean);
+  assertAdminCannotManageRbac(roleRecord, requestedAllowedPermissionKeys);
 
   await Promise.all(rolePermissionUpdates.map((rolePermissionUpdate) => (
     RolePermission.upsert({
@@ -564,7 +591,7 @@ export async function updateRolePermissions(req, res) {
 export async function updateRolePermission(req, res) {
   const roleId = parsePositiveInteger(req.params.roleId, "role id");
   const permissionId = parsePositiveInteger(req.params.permissionId, "permission id");
-  const [roleRecord] = await Promise.all([
+  const [roleRecord, permissionRecord] = await Promise.all([
     findRoleOr404(roleId),
     findPermissionOr404(permissionId),
   ]);
@@ -574,6 +601,10 @@ export async function updateRolePermission(req, res) {
   }
 
   const is_allowed = normalizeBoolean(req.body?.is_allowed, "is_allowed", { required: true });
+  if (is_allowed && isDefaultAdminRoleRecord(roleRecord) && permissionRecord.action_key === RBAC_MANAGE_PERMISSION_KEY) {
+    throw createHttpError("Admin role cannot be allowed to manage RBAC.", 409);
+  }
+
   await RolePermission.upsert({
     role_id: roleId,
     permission_id: permissionId,

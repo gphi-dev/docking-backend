@@ -161,6 +161,13 @@ WHERE roles.slug = 'admin'
 ON DUPLICATE KEY UPDATE
   is_allowed = role_permissions.is_allowed;
 
+UPDATE role_permissions
+JOIN roles ON roles.id = role_permissions.role_id
+JOIN permissions ON permissions.id = role_permissions.permission_id
+SET role_permissions.is_allowed = 0
+WHERE roles.slug = 'admin'
+  AND permissions.action_key = 'rbac.manage';
+
 INSERT INTO role_permissions (role_id, permission_id, is_allowed)
 SELECT @super_admin_role_id, permissions.id, 1
 FROM permissions
