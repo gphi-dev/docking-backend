@@ -61,25 +61,6 @@ VALUES
 ON DUPLICATE KEY UPDATE
   description = IFNULL(description, VALUES(description));
 
-INSERT INTO permissions (access_group, action_name, action_key, endpoint, method, description)
-VALUES
-  ('RBAC', 'Manage RBAC', 'rbac.manage', '/api/rbac/*', '*', 'Manage roles, permissions, and role permission assignments.'),
-  ('Admins', 'View admins', 'admins.view', '/api/admins', 'GET', 'View admin users.'),
-  ('Admins', 'Create admins', 'admins.create', '/api/admins', 'POST', 'Create admin users.'),
-  ('Admins', 'Update admins', 'admins.update', '/api/admins/:id', 'PUT', 'Update admin users.'),
-  ('Admins', 'Delete admins', 'admins.delete', '/api/admins/:id', 'DELETE', 'Delete admin users.'),
-  ('Games', 'View games', 'games.view', '/api/games', 'GET', 'View game records.'),
-  ('Games', 'Create games', 'games.create', '/api/games', 'POST', 'Create game records.'),
-  ('Games', 'Update games', 'games.update', '/api/games/:gameId', 'PUT', 'Update game records.'),
-  ('Games', 'Delete games', 'games.delete', '/api/games/:gameId', 'DELETE', 'Delete game records.'),
-  ('Subscribers', 'View subscribers', 'subscribers.view', '/api/subscribers/*', 'GET', 'View subscriber reports.')
-ON DUPLICATE KEY UPDATE
-  access_group = VALUES(access_group),
-  action_name = VALUES(action_name),
-  endpoint = VALUES(endpoint),
-  method = VALUES(method),
-  description = IFNULL(description, VALUES(description));
-
 CREATE TABLE IF NOT EXISTS admins (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   username VARCHAR(64) NOT NULL,
@@ -159,14 +140,6 @@ CREATE TABLE IF NOT EXISTS role_permissions (
     FOREIGN KEY (permission_id) REFERENCES permissions (id)
     ON DELETE CASCADE
 ) ENGINE=InnoDB;
-
-INSERT INTO role_permissions (role_id, permission_id, is_allowed)
-SELECT roles.id, permissions.id, 1
-FROM roles
-CROSS JOIN permissions
-WHERE roles.slug = 'super-admin'
-ON DUPLICATE KEY UPDATE
-  is_allowed = role_permissions.is_allowed;
 
 INSERT INTO role_permissions (role_id, permission_id, is_allowed)
 SELECT roles.id, permissions.id,
