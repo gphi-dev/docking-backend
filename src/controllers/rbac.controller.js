@@ -363,7 +363,7 @@ export async function getRbacOverview(_req, res) {
 }
 
 export async function listRoles(_req, res) {
-  const roles = await Role.findAll({ order: [["id", "ASC"]] });
+  const roles = await Role.findAll({ order: [["id", "DESC"]] });
   return res.json(roles.map((roleRecord) => serializeRole(roleRecord)));
 }
 
