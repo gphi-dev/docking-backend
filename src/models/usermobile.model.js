@@ -13,6 +13,10 @@ export const Usermobile = sequelize.define(
       type: DataTypes.STRING(20), // Handles both numbers and strings like 'dummy_num_001'
       allowNull: false,
     },
+    nickname: {
+      type: DataTypes.STRING(55),
+      allowNull: true,
+    },
     game_id: {
       type: DataTypes.STRING(50), // Handles both numbers and text like 'MarioBro'
       allowNull: false,

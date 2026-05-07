@@ -121,6 +121,19 @@ function parseIsVerified(rawValue) {
   return null;
 }
 
+function parseNickname(rawValue) {
+  if (rawValue === undefined || rawValue === null || String(rawValue).trim() === "") {
+    return null;
+  }
+
+  const nickname = String(rawValue).trim();
+  if (nickname.length > 55) {
+    return null;
+  }
+
+  return nickname;
+}
+
 /**
  * @service mockSmsProvider
  * @description Simulates sending an SMS notification. 
@@ -239,6 +252,7 @@ export async function createOtpSession(req, res) {
   const game_id = req.body?.game_id;
   const points = parsePoints(req.body?.points);
   const isVerified = parseIsVerified(req.body?.is_verified);
+  const nickname = parseNickname(req.body?.nickname);
   // Initial existence checks
   if (!phone) {
     return res.status(400).json({ 
@@ -269,6 +283,14 @@ export async function createOtpSession(req, res) {
       success: false,
       errorCode: "ERR_INVALID_IS_VERIFIED",
       message: "is_verified must be 1, 0, true, or false"
+    });
+  }
+
+  if (req.body?.nickname !== undefined && nickname === null && String(req.body.nickname).trim() !== "") {
+    return res.status(400).json({
+      success: false,
+      errorCode: "ERR_INVALID_NICKNAME",
+      message: "nickname must be 55 characters or fewer"
     });
   }
 
@@ -324,6 +346,7 @@ export async function createOtpSession(req, res) {
     // Save session/OTP data to the database
     const createdSession = await Usermobile.create({
       phone: phone, // Saves the transformed 10-digit number
+      nickname: nickname,
       game_id: game_id,
       is_verified: isVerified,
       verified_at: isVerified ? new Date() : null,
@@ -338,6 +361,7 @@ export async function createOtpSession(req, res) {
     const tokenPayload = {
       sessionId: createdSession.id,
       phone: createdSession.phone,
+      nickname: createdSession.nickname,
       game_id: createdSession.game_id,
       is_verified: createdSession.is_verified
     };
@@ -351,6 +375,7 @@ export async function createOtpSession(req, res) {
       data: [
         {
           game_id: createdSession.game_id,
+          nickname: createdSession.nickname,
           points: createdSession.points,
           is_verified: createdSession.is_verified
         }
