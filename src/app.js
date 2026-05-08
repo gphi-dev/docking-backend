@@ -8,7 +8,7 @@ import { subscribersRouter } from "./routes/subscribers.routes.js";
 import { adminsRouter } from "./routes/admins.routes.js";
 import { usermobileRouter } from "./routes/usermobile.routes.js";
 import { rbacRouter } from "./routes/rbac.routes.js";
-import { rewardsRouter } from "./routes/rewards.routes.js";
+import { rewardsPublicRouter, rewardsRouter } from "./routes/rewards.routes.js";
 import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
 
@@ -64,6 +64,9 @@ export function createApp() {
 
   // /api/games/* - admin-protected game management routes.
   app.use("/api/games", authenticateAdminJwt, gamesRouter);
+
+  // /api/rewards/draw - public game reward draw protected by game_id + gamesecretkey.
+  app.use("/api/rewards", rewardsPublicRouter);
 
   // /api/rewards/* - admin-protected reward management routes.
   app.use("/api/rewards", authenticateAdminJwt, rewardsRouter);

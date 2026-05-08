@@ -3,6 +3,7 @@
 Use the backend base URL as `{{base_url}}` and an admin JWT as `{{admin_token}}`.
 The `game_id` field is the value from `games.game_id`, not `games.id`.
 For `POST /api/rewards`, include the matching `gamesecretkey` when filtering by `game_id`.
+`POST /api/rewards/draw` validates with `game_id` and `gamesecretkey`, so it does not require an admin JWT.
 
 Headers for all requests:
 
@@ -57,13 +58,26 @@ POST {{base_url}}/api/rewards
 }
 ```
 
-## 4. Get Reward By ID
+## 4. Draw Reward
+
+```text
+POST {{base_url}}/api/rewards/draw
+```
+
+```json
+{
+  "game_id": 1,
+  "gamesecretkey": "135a9b7d8776e5228250ee5a844cd7cd"
+}
+```
+
+## 5. Get Reward By ID
 
 ```text
 GET {{base_url}}/api/rewards/1
 ```
 
-## 5. Update Reward
+## 6. Update Reward
 
 ```text
 PUT {{base_url}}/api/rewards/1
@@ -80,7 +94,7 @@ PUT {{base_url}}/api/rewards/1
 }
 ```
 
-## 6. Deactivate Reward
+## 7. Deactivate Reward
 
 ```text
 PATCH {{base_url}}/api/rewards/1/status
@@ -92,7 +106,7 @@ PATCH {{base_url}}/api/rewards/1/status
 }
 ```
 
-## 7. Delete Reward
+## 8. Delete Reward
 
 ```text
 DELETE {{base_url}}/api/rewards/1

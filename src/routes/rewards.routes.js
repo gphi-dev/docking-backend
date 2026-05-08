@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createReward,
   deleteReward,
+  drawReward,
   getRewardById,
   listRewards,
   updateReward,
@@ -11,6 +12,10 @@ import { requireAnyAdminPermission } from "../middleware/requireAdminPermission.
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 export const rewardsRouter = Router();
+export const rewardsPublicRouter = Router();
+
+// POST /api/rewards/draw - draws one available reward by probability for a validated game.
+rewardsPublicRouter.post("/draw", asyncHandler(drawReward));
 
 // POST /api/rewards - lists rewards with filters, search, and pagination.
 rewardsRouter.post("/", requireAnyAdminPermission(["rbac.manage", "rewards.view"]), asyncHandler(listRewards));

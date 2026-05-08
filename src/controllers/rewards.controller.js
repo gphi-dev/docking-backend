@@ -1,6 +1,7 @@
 import {
   createRewardRecord,
   deleteRewardRecord,
+  drawRewardRecord,
   getRewardRecordById,
   listRewardRecords,
   updateRewardRecord,
@@ -281,6 +282,18 @@ export async function listRewards(req, res) {
       total,
       total_pages: total === 0 ? 0 : Math.ceil(total / limit),
     },
+  });
+}
+
+export async function drawReward(req, res) {
+  const gameId = parsePositiveInteger(req.body?.game_id, "game_id");
+  await assertGameSecretKeyMatches(gameId, readGameSecretKeyPayload(req.body ?? {}));
+  const reward = await drawRewardRecord(gameId);
+
+  return res.json({
+    success: true,
+    message: "Reward drawn successfully",
+    data: reward,
   });
 }
 

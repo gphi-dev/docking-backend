@@ -221,6 +221,90 @@ export async function getRewardRecordById(rewardId) {
   return findSerializedRewardById(rewardId);
 }
 
+function pickRewardByProbability(rewards) {
+  const totalProbability = rewards.reduce((total, reward) => total + Number(reward.probability ?? 0), 0);
+  if (totalProbability <= 0) {
+    throw createHttpError("No drawable rewards with valid probability for this game", 409);
+  }
+
+  const drawValue = Math.random() * totalProbability;
+  let runningProbability = 0;
+
+  for (const reward of rewards) {
+    runningProbability += Number(reward.probability ?? 0);
+    if (drawValue <= runningProbability) {
+      return reward;
+    }
+  }
+
+  return rewards[rewards.length - 1];
+}
+
+export async function drawRewardRecord(gameId) {
+  return sequelize.transaction(async (transaction) => {
+    const gamesByGameId = await lockGamesForRewardMutation([gameId], transaction);
+    if (!gamesByGameId.has(Number(gameId))) {
+      throw createHttpError("Game not found", 404);
+    }
+
+    const [deactivatedOutOfStockCount] = await Reward.update(
+      {
+        is_active: false,
+        probability: 0,
+      },
+      {
+        where: {
+          game_id: gameId,
+          is_active: true,
+          holdings: 0,
+        },
+        transaction,
+      },
+    );
+
+    if (deactivatedOutOfStockCount > 0) {
+      await recalculateRewardProbabilities(gameId, transaction);
+    }
+
+    const drawableRewards = await Reward.findAll({
+      where: {
+        game_id: gameId,
+        is_active: true,
+        holdings: {
+          [Op.gt]: 0,
+        },
+        probability: {
+          [Op.gt]: 0,
+        },
+      },
+      order: [["id", "ASC"]],
+      transaction,
+      lock: true,
+    });
+
+    if (drawableRewards.length === 0) {
+      throw createHttpError("No available rewards for this game", 409);
+    }
+
+    const drawnReward = pickRewardByProbability(drawableRewards);
+    const nextHoldings = Math.max(Number(drawnReward.holdings ?? 0) - 1, 0);
+    drawnReward.holdings = nextHoldings;
+
+    if (nextHoldings === 0) {
+      drawnReward.is_active = false;
+      drawnReward.probability = 0;
+    }
+
+    await drawnReward.save({ transaction });
+
+    if (nextHoldings === 0) {
+      await recalculateRewardProbabilities(gameId, transaction);
+    }
+
+    return findSerializedRewardById(drawnReward.id, transaction);
+  });
+}
+
 export async function updateRewardRecord(rewardId, payload) {
   return sequelize.transaction(async (transaction) => {
     const reward = await findRewardOrThrow(rewardId, transaction);
