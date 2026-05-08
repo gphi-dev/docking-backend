@@ -2,6 +2,7 @@
 
 Use the backend base URL as `{{base_url}}` and an admin JWT as `{{admin_token}}`.
 The `game_id` field is the value from `games.game_id`, not `games.id`.
+For `POST /api/rewards`, include the matching `gamesecretkey` when filtering by `game_id`.
 
 Headers for all requests:
 
@@ -13,7 +14,7 @@ Authorization: Bearer {{admin_token}}
 ## 1. Create Reward
 
 ```text
-POST {{base_url}}/api/rewards
+POST {{base_url}}/api/rewards/create
 ```
 
 ```json
@@ -30,13 +31,30 @@ POST {{base_url}}/api/rewards
 ## 2. Get All Rewards
 
 ```text
-GET {{base_url}}/api/rewards?page=1&limit=10
+POST {{base_url}}/api/rewards
+```
+
+```json
+{
+  "page": 1,
+  "limit": 10
+}
 ```
 
 ## 3. Get Rewards By Game ID
 
 ```text
-GET {{base_url}}/api/rewards?game_id=1&is_active=1&page=1&limit=10
+POST {{base_url}}/api/rewards
+```
+
+```json
+{
+  "game_id": 1,
+  "gamesecretkey": "135a9b7d8776e5228250ee5a844cd7cd",
+  "is_active": 1,
+  "page": 1,
+  "limit": 10
+}
 ```
 
 ## 4. Get Reward By ID

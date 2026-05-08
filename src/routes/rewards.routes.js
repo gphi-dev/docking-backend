@@ -12,11 +12,11 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 
 export const rewardsRouter = Router();
 
-// GET /api/rewards - lists rewards with filters, search, and pagination.
-rewardsRouter.get("/", requireAnyAdminPermission(["rbac.manage", "rewards.view"]), asyncHandler(listRewards));
+// POST /api/rewards - lists rewards with filters, search, and pagination.
+rewardsRouter.post("/", requireAnyAdminPermission(["rbac.manage", "rewards.view"]), asyncHandler(listRewards));
 
-// POST /api/rewards - creates a reward and recalculates game reward probabilities.
-rewardsRouter.post("/", requireAnyAdminPermission(["rbac.manage", "rewards.create"]), asyncHandler(createReward));
+// POST /api/rewards/create - creates a reward and recalculates game reward probabilities.
+rewardsRouter.post("/create", requireAnyAdminPermission(["rbac.manage", "rewards.create"]), asyncHandler(createReward));
 
 // PATCH /api/rewards/:id/status - toggles reward active state and recalculates probabilities.
 rewardsRouter.patch(

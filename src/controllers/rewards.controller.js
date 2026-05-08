@@ -6,6 +6,7 @@ import {
   updateRewardRecord,
   updateRewardStatusRecord,
 } from "../services/rewards.service.js";
+import { Game } from "../models/index.js";
 
 const DEFAULT_REWARD_PAGE_SIZE = 10;
 const MAX_REWARD_PAGE_SIZE = 100;
@@ -168,6 +169,41 @@ function normalizeSearch(rawValue) {
   return normalizedSearch || undefined;
 }
 
+function readGameSecretKeyPayload(body) {
+  if (Object.prototype.hasOwnProperty.call(body ?? {}, "gamesecretkey")) {
+    return body.gamesecretkey;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body ?? {}, "game_secret_key")) {
+    return body.game_secret_key;
+  }
+
+  return undefined;
+}
+
+async function assertGameSecretKeyMatches(gameId, rawGameSecretKey) {
+  if (gameId === undefined) {
+    return;
+  }
+
+  if (rawGameSecretKey === undefined || rawGameSecretKey === null || String(rawGameSecretKey).trim() === "") {
+    throw createHttpError("gamesecretkey is required when game_id is provided");
+  }
+
+  const game = await Game.findOne({
+    attributes: ["game_id", "gamesecretkey"],
+    where: { game_id: gameId },
+  });
+
+  if (!game) {
+    throw createHttpError("Game not found", 404);
+  }
+
+  if (String(game.gamesecretkey ?? "").trim() !== String(rawGameSecretKey).trim()) {
+    throw createHttpError("gamesecretkey does not match game_id", 401);
+  }
+}
+
 function buildCreatePayload(body) {
   return {
     game_id: parsePositiveInteger(body?.game_id, "game_id"),
@@ -215,12 +251,18 @@ export async function createReward(req, res) {
 }
 
 export async function listRewards(req, res) {
-  const page = parsePaginationInteger(req.query.page, "page", 1);
-  const requestedLimit = parsePaginationInteger(req.query.limit, "limit", DEFAULT_REWARD_PAGE_SIZE);
+  const filters = {
+    ...req.query,
+    ...(req.body ?? {}),
+  };
+  const page = parsePaginationInteger(filters.page, "page", 1);
+  const requestedLimit = parsePaginationInteger(filters.limit, "limit", DEFAULT_REWARD_PAGE_SIZE);
   const limit = Math.min(requestedLimit, MAX_REWARD_PAGE_SIZE);
-  const gameId = parseOptionalPositiveInteger(req.query.game_id, "game_id");
-  const isActive = normalizeIsActive(req.query.is_active);
-  const search = normalizeSearch(req.query.search);
+  const gameId = parseOptionalPositiveInteger(filters.game_id, "game_id");
+  await assertGameSecretKeyMatches(gameId, readGameSecretKeyPayload(filters));
+
+  const isActive = normalizeIsActive(filters.is_active);
+  const search = normalizeSearch(filters.search);
   const { rewards, total } = await listRewardRecords({
     gameId,
     isActive,
