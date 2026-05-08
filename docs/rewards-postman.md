@@ -5,7 +5,7 @@ The `game_id` field is the value from `games.game_id`, not `games.id`.
 For `POST /api/rewards`, include the matching `gamesecretkey` when filtering by `game_id`.
 `POST /api/rewards/draw` validates with `game_id` and `gamesecretkey`, so it does not require an admin JWT.
 
-Headers for all requests:
+Headers for admin-protected requests:
 
 ```text
 Content-Type: application/json
@@ -58,7 +58,7 @@ POST {{base_url}}/api/rewards
 }
 ```
 
-## 4. Draw Reward
+## 4. Draw Rewards
 
 ```text
 POST {{base_url}}/api/rewards/draw
@@ -67,7 +67,8 @@ POST {{base_url}}/api/rewards/draw
 ```json
 {
   "game_id": 1,
-  "gamesecretkey": "135a9b7d8776e5228250ee5a844cd7cd"
+  "gamesecretkey": "135a9b7d8776e5228250ee5a844cd7cd",
+  "limit": 4
 }
 ```
 

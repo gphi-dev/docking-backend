@@ -11,6 +11,8 @@ import { Game } from "../models/index.js";
 
 const DEFAULT_REWARD_PAGE_SIZE = 10;
 const MAX_REWARD_PAGE_SIZE = 100;
+const DEFAULT_REWARD_DRAW_LIMIT = 4;
+const MAX_REWARD_DRAW_LIMIT = 100;
 const PICTURE_MAX_LENGTH = 255;
 const PRIZE_MAX_LENGTH = 255;
 
@@ -64,6 +66,11 @@ function parsePaginationInteger(rawValue, fieldName, fallbackValue) {
   }
 
   return parsedValue;
+}
+
+function parseDrawLimit(rawValue) {
+  const parsedLimit = parsePaginationInteger(rawValue, "limit", DEFAULT_REWARD_DRAW_LIMIT);
+  return Math.min(parsedLimit, MAX_REWARD_DRAW_LIMIT);
 }
 
 function normalizeRequiredString(rawValue, fieldName, maxLength) {
@@ -287,13 +294,16 @@ export async function listRewards(req, res) {
 
 export async function drawReward(req, res) {
   const gameId = parsePositiveInteger(req.body?.game_id, "game_id");
+  const limit = parseDrawLimit(req.body?.limit);
   await assertGameSecretKeyMatches(gameId, readGameSecretKeyPayload(req.body ?? {}));
-  const reward = await drawRewardRecord(gameId);
+  const rewards = await drawRewardRecord(gameId, limit);
 
   return res.json({
     success: true,
-    message: "Reward drawn successfully",
-    data: reward,
+    message: "Rewards drawn successfully",
+    data: rewards,
+    count: rewards.length,
+    limit,
   });
 }
 

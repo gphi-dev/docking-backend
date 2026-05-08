@@ -240,7 +240,7 @@ function pickRewardByProbability(rewards) {
   return rewards[rewards.length - 1];
 }
 
-export async function drawRewardRecord(gameId) {
+export async function drawRewardRecord(gameId, limit = 4) {
   return sequelize.transaction(async (transaction) => {
     const gamesByGameId = await lockGamesForRewardMutation([gameId], transaction);
     if (!gamesByGameId.has(Number(gameId))) {
@@ -286,22 +286,45 @@ export async function drawRewardRecord(gameId) {
       throw createHttpError("No available rewards for this game", 409);
     }
 
-    const drawnReward = pickRewardByProbability(drawableRewards);
-    const nextHoldings = Math.max(Number(drawnReward.holdings ?? 0) - 1, 0);
-    drawnReward.holdings = nextHoldings;
-
-    if (nextHoldings === 0) {
-      drawnReward.is_active = false;
-      drawnReward.probability = 0;
+    const totalAvailableHoldings = drawableRewards.reduce(
+      (total, reward) => total + Number(reward.holdings ?? 0),
+      0,
+    );
+    if (totalAvailableHoldings < limit) {
+      throw createHttpError("Not enough available rewards for requested draw limit", 409);
     }
 
-    await drawnReward.save({ transaction });
+    const drawnRewards = [];
+    const changedRewardsById = new Map();
+    let shouldRecalculate = false;
 
-    if (nextHoldings === 0) {
+    for (let drawIndex = 0; drawIndex < limit; drawIndex += 1) {
+      const availableRewards = drawableRewards.filter(
+        (reward) => Boolean(reward.is_active) && Number(reward.holdings ?? 0) > 0,
+      );
+      const drawnReward = pickRewardByProbability(availableRewards);
+      const nextHoldings = Math.max(Number(drawnReward.holdings ?? 0) - 1, 0);
+      drawnReward.holdings = nextHoldings;
+
+      if (nextHoldings === 0) {
+        drawnReward.is_active = false;
+        drawnReward.probability = 0;
+        shouldRecalculate = true;
+      }
+
+      changedRewardsById.set(String(drawnReward.id), drawnReward);
+      drawnRewards.push(serializeReward(drawnReward));
+    }
+
+    for (const changedReward of changedRewardsById.values()) {
+      await changedReward.save({ transaction });
+    }
+
+    if (shouldRecalculate) {
       await recalculateRewardProbabilities(gameId, transaction);
     }
 
-    return findSerializedRewardById(drawnReward.id, transaction);
+    return drawnRewards;
   });
 }
 

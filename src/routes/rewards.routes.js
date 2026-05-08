@@ -14,7 +14,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 export const rewardsRouter = Router();
 export const rewardsPublicRouter = Router();
 
-// POST /api/rewards/draw - draws one available reward by probability for a validated game.
+// POST /api/rewards/draw - draws available rewards by probability for a validated game.
 rewardsPublicRouter.post("/draw", asyncHandler(drawReward));
 
 // POST /api/rewards - lists rewards with filters, search, and pagination.
