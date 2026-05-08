@@ -29,6 +29,7 @@ async function getGamesColumnSupport() {
     hasGameUrl,
     hasGameSecretKey,
     hasIsLandscape,
+    hasIsMobile,
     hasSlug,
     hasBackgroundUrl,
   ] = await Promise.all([
@@ -36,11 +37,20 @@ async function getGamesColumnSupport() {
     hasGamesTableColumn("game_url"),
     hasGamesTableColumn("gamesecretkey"),
     hasGamesTableColumn("is_landscape"),
+    hasGamesTableColumn("is_mobile"),
     hasGamesTableColumn("slug"),
     hasGamesTableColumn("background_url"),
   ]);
 
-  return { hasGameId, hasGameUrl, hasGameSecretKey, hasIsLandscape, hasSlug, hasBackgroundUrl };
+  return {
+    hasGameId,
+    hasGameUrl,
+    hasGameSecretKey,
+    hasIsLandscape,
+    hasIsMobile,
+    hasSlug,
+    hasBackgroundUrl,
+  };
 }
 
 function buildGameSelectColumns(columnSupport, options = {}) {
@@ -52,6 +62,7 @@ function buildGameSelectColumns(columnSupport, options = {}) {
     columnSupport.hasSlug ? "games.slug" : "NULL AS slug",
     "games.name",
     columnSupport.hasIsLandscape ? "games.is_landscape" : "'False' AS is_landscape",
+    columnSupport.hasIsMobile ? "games.is_mobile" : "'False' AS is_mobile",
     "games.description",
     "games.image_url",
     columnSupport.hasBackgroundUrl ? "games.background_url" : "NULL AS background_url",
@@ -94,6 +105,10 @@ function buildFeaturedGamesGroupBy(columnSupport) {
     groupByColumns.splice(groupByColumns.length - 1, 0, "games.is_landscape");
   }
 
+  if (columnSupport.hasIsMobile) {
+    groupByColumns.splice(groupByColumns.length - 1, 0, "games.is_mobile");
+  }
+
   if (columnSupport.hasBackgroundUrl) {
     groupByColumns.splice(groupByColumns.length - 1, 0, "games.background_url");
   }
@@ -115,6 +130,7 @@ async function mapGameRecord(record, options = {}) {
     game_url: record.game_url ?? null,
     slug: record.slug ?? null,
     is_landscape: record.is_landscape ?? "False",
+    is_mobile: record.is_mobile ?? "False",
     ...(includeGameSecretKey
       ? {
           gamesecretkey: record.gamesecretkey ?? null,

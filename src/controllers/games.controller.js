@@ -22,6 +22,8 @@ const GAME_URL_MAX_LENGTH = 255;
 const GAME_SECRET_KEY_MAX_LENGTH = 45;
 const GAME_IS_LANDSCAPE_MAX_LENGTH = 10;
 const DEFAULT_GAME_IS_LANDSCAPE = "False";
+const GAME_IS_MOBILE_MAX_LENGTH = 10;
+const DEFAULT_GAME_IS_MOBILE = "False";
 
 function createBadRequestError(message) {
   const error = new Error(message);
@@ -122,6 +124,24 @@ function normalizeGameLandscape(rawValue, options = {}) {
   return normalizedGameLandscape || DEFAULT_GAME_IS_LANDSCAPE;
 }
 
+function normalizeGameMobile(rawValue, options = {}) {
+  const { allowUndefined = false } = options;
+  if (rawValue === undefined) {
+    return allowUndefined ? undefined : DEFAULT_GAME_IS_MOBILE;
+  }
+
+  if (rawValue === null) {
+    return DEFAULT_GAME_IS_MOBILE;
+  }
+
+  const normalizedGameMobile = String(rawValue).trim();
+  if (normalizedGameMobile.length > GAME_IS_MOBILE_MAX_LENGTH) {
+    throw createBadRequestError(`is_mobile must be ${GAME_IS_MOBILE_MAX_LENGTH} characters or less`);
+  }
+
+  return normalizedGameMobile || DEFAULT_GAME_IS_MOBILE;
+}
+
 function readGameSecretKeyPayload(body) {
   if (Object.prototype.hasOwnProperty.call(body ?? {}, "game_secret_key")) {
     return body.game_secret_key;
@@ -173,6 +193,7 @@ async function serializeGameResponse(game) {
   gamePayload.image_url = imageUrl;
   gamePayload.background_url = backgroundUrl;
   gamePayload.is_landscape = gamePayload.is_landscape ?? DEFAULT_GAME_IS_LANDSCAPE;
+  gamePayload.is_mobile = gamePayload.is_mobile ?? DEFAULT_GAME_IS_MOBILE;
   return gamePayload;
 }
 
@@ -285,6 +306,7 @@ export async function createGame(req, res) {
   const game_url = normalizeOptionalGameUrl(req.body?.game_url);
   const gamesecretkey = normalizeOptionalGameSecretKey(readGameSecretKeyPayload(req.body));
   const is_landscape = normalizeGameLandscape(req.body?.is_landscape);
+  const is_mobile = normalizeGameMobile(req.body?.is_mobile);
   const description = req.body?.description ?? null;
   const imageUrl = await resolveGameImageUrl(req.body?.image_url ?? null);
   const backgroundUrl = await resolveGameImageUrl(req.body?.background_url ?? null, {
@@ -301,6 +323,7 @@ export async function createGame(req, res) {
       game_url,
       gamesecretkey,
       is_landscape,
+      is_mobile,
       description,
       image_url: imageUrl,
       background_url: backgroundUrl,
@@ -341,6 +364,7 @@ export async function updateGame(req, res) {
     : undefined;
   const nextGameSecretKey = normalizeOptionalGameSecretKey(readGameSecretKeyPayload(req.body));
   const nextGameLandscape = normalizeGameLandscape(req.body?.is_landscape, { allowUndefined: true });
+  const nextGameMobile = normalizeGameMobile(req.body?.is_mobile, { allowUndefined: true });
   const nextDescription = req.body?.description;
   const nextImageUrl = await resolveGameImageUrlForUpdate(req.body?.image_url, game.image_url);
   const nextBackgroundUrl = await resolveGameImageUrlForUpdate(
@@ -373,6 +397,9 @@ export async function updateGame(req, res) {
   }
   if (nextGameLandscape !== undefined) {
     game.is_landscape = nextGameLandscape;
+  }
+  if (nextGameMobile !== undefined) {
+    game.is_mobile = nextGameMobile;
   }
   if (nextDescription !== undefined) {
     game.description = nextDescription;

@@ -31,6 +31,11 @@ export const Game = sequelize.define(
       allowNull: false,
       defaultValue: "False",
     },
+    is_mobile: {
+      type: DataTypes.STRING(10),
+      allowNull: false,
+      defaultValue: "False",
+    },
     description: {
       type: DataTypes.TEXT,
       allowNull: true,
