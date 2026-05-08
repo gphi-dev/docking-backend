@@ -2,7 +2,6 @@
 
 Use the backend base URL as `{{base_url}}` and an admin JWT as `{{admin_token}}`.
 The `game_id` field is the value from `games.game_id`, not `games.id`.
-For `POST /api/rewards`, include the matching `gamesecretkey` when filtering by `game_id`.
 `POST /api/rewards/draw` validates with `game_id` and `gamesecretkey`, so it does not require an admin JWT.
 
 Headers for admin-protected requests:
@@ -11,6 +10,9 @@ Headers for admin-protected requests:
 Content-Type: application/json
 Authorization: Bearer {{admin_token}}
 ```
+
+`POST /api/rewards/create` does not require or use `gamesecretkey`.
+Older clients that still send a create body to `POST /api/rewards` are also supported when the body includes `prize`.
 
 ## 1. Create Reward
 
@@ -51,7 +53,6 @@ POST {{base_url}}/api/rewards
 ```json
 {
   "game_id": 1,
-  "gamesecretkey": "135a9b7d8776e5228250ee5a844cd7cd",
   "is_active": 1,
   "page": 1,
   "limit": 10

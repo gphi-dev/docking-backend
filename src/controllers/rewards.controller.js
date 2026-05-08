@@ -25,6 +25,28 @@ function hasOwn(body, fieldName) {
   return Object.prototype.hasOwnProperty.call(body ?? {}, fieldName);
 }
 
+function readFirstDefined(body, fieldNames) {
+  for (const fieldName of fieldNames) {
+    if (hasOwn(body, fieldName)) {
+      return body[fieldName];
+    }
+  }
+
+  return undefined;
+}
+
+function readRewardPayloadBody(body) {
+  if (body?.reward && typeof body.reward === "object" && !Array.isArray(body.reward)) {
+    return body.reward;
+  }
+
+  if (body?.data && typeof body.data === "object" && !Array.isArray(body.data)) {
+    return body.data;
+  }
+
+  return body ?? {};
+}
+
 function parsePositiveInteger(rawValue, fieldName) {
   if (rawValue === undefined || rawValue === null || String(rawValue).trim() === "") {
     throw createHttpError(`${fieldName} is required`);
@@ -176,6 +198,15 @@ function normalizeIsActive(rawValue, options = {}) {
     return 0;
   }
 
+  const normalizedValue = String(rawValue).trim().toLowerCase();
+  if (["true", "yes", "active"].includes(normalizedValue)) {
+    return 1;
+  }
+
+  if (["false", "no", "inactive"].includes(normalizedValue)) {
+    return 0;
+  }
+
   throw createHttpError("is_active must be 0 or 1");
 }
 
@@ -224,13 +255,34 @@ async function assertGameSecretKeyMatches(gameId, rawGameSecretKey) {
 }
 
 function buildCreatePayload(body) {
+  const payloadBody = readRewardPayloadBody(body);
+  const gamePayload = readFirstDefined(payloadBody, ["game"]);
+  const selectedGamePayload = gamePayload && typeof gamePayload === "object"
+    ? readFirstDefined(gamePayload, ["game_id", "gameId", "value"])
+    : gamePayload;
+  const picturePayload = readFirstDefined(payloadBody, ["picture", "image_url", "imageUrl"]);
+  const normalizedPicturePayload = picturePayload && typeof picturePayload === "object"
+    ? readFirstDefined(picturePayload, ["url", "src", "path", "image_url", "imageUrl"])
+    : picturePayload;
+
   return {
-    game_id: parsePositiveInteger(body?.game_id, "game_id"),
-    picture: normalizeOptionalString(body?.picture, "picture", PICTURE_MAX_LENGTH) ?? null,
-    description: normalizeOptionalText(body?.description, "description") ?? null,
-    prize: normalizeRequiredString(body?.prize, "prize", PRIZE_MAX_LENGTH),
-    holdings: normalizeHoldings(body?.holdings, { defaultValue: 0 }),
-    is_active: normalizeIsActive(body?.is_active, { defaultValue: 1 }),
+    game_id: parsePositiveInteger(
+      readFirstDefined(payloadBody, ["game_id", "gameId"]) ?? selectedGamePayload,
+      "game_id",
+    ),
+    picture: normalizeOptionalString(normalizedPicturePayload, "picture", PICTURE_MAX_LENGTH) ?? null,
+    description: normalizeOptionalText(readFirstDefined(payloadBody, ["description", "desc"]), "description") ?? null,
+    prize: normalizeRequiredString(
+      readFirstDefined(payloadBody, ["prize", "reward_name", "rewardName", "name", "title"]),
+      "prize",
+      PRIZE_MAX_LENGTH,
+    ),
+    holdings: normalizeHoldings(readFirstDefined(payloadBody, ["holdings", "quantity", "stock"]), {
+      defaultValue: 0,
+    }),
+    is_active: normalizeIsActive(readFirstDefined(payloadBody, ["is_active", "isActive", "active"]), {
+      defaultValue: 1,
+    }),
   };
 }
 
@@ -298,6 +350,23 @@ function buildBulkProbabilityPayload(body) {
   };
 }
 
+export function isCreateRewardRequestBody(body) {
+  const payloadBody = readRewardPayloadBody(body);
+  return [
+    "prize",
+    "reward_name",
+    "rewardName",
+    "name",
+    "title",
+    "picture",
+    "image_url",
+    "imageUrl",
+    "holdings",
+    "quantity",
+    "stock",
+  ].some((fieldName) => hasOwn(payloadBody, fieldName));
+}
+
 export async function createReward(req, res) {
   const reward = await createRewardRecord(buildCreatePayload(req.body ?? {}));
 
@@ -306,6 +375,14 @@ export async function createReward(req, res) {
     message: "Reward created successfully",
     data: reward,
   });
+}
+
+export async function createOrListRewards(req, res) {
+  if (isCreateRewardRequestBody(req.body ?? {})) {
+    return createReward(req, res);
+  }
+
+  return listRewards(req, res);
 }
 
 export async function listRewards(req, res) {
@@ -317,7 +394,6 @@ export async function listRewards(req, res) {
   const requestedLimit = parsePaginationInteger(filters.limit, "limit", DEFAULT_REWARD_PAGE_SIZE);
   const limit = Math.min(requestedLimit, MAX_REWARD_PAGE_SIZE);
   const gameId = parseOptionalPositiveInteger(filters.game_id, "game_id");
-  await assertGameSecretKeyMatches(gameId, readGameSecretKeyPayload(filters));
 
   const isActive = normalizeIsActive(filters.is_active);
   const search = normalizeSearch(filters.search);

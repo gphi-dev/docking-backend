@@ -1,10 +1,11 @@
 import { Router } from "express";
 import {
+  createOrListRewards,
   createReward,
   deleteReward,
   drawReward,
   getRewardById,
-  listRewards,
+  isCreateRewardRequestBody,
   updateRewardProbabilities,
   updateReward,
   updateRewardStatus,
@@ -15,13 +16,25 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 export const rewardsRouter = Router();
 export const rewardsPublicRouter = Router();
 
+function isCreateRewardRequest(req) {
+  return isCreateRewardRequestBody(req.body ?? {});
+}
+
+function requireRewardsRootPermission(req, res, next) {
+  const permissionKeys = isCreateRewardRequest(req)
+    ? ["rbac.manage", "rewards.create"]
+    : ["rbac.manage", "rewards.view"];
+
+  return requireAnyAdminPermission(permissionKeys)(req, res, next);
+}
+
 // POST /api/rewards/draw - draws all active rewards with holdings and probability for a validated game.
 rewardsPublicRouter.post("/draw", asyncHandler(drawReward));
 
-// POST /api/rewards - lists rewards with filters, search, and pagination.
-rewardsRouter.post("/", requireAnyAdminPermission(["rbac.manage", "rewards.view"]), asyncHandler(listRewards));
+// POST /api/rewards - lists rewards, or creates a reward for older clients that post a prize here.
+rewardsRouter.post("/", requireRewardsRootPermission, asyncHandler(createOrListRewards));
 
-// POST /api/rewards/create - creates a reward and recalculates game reward probabilities.
+// POST /api/rewards/create - creates a reward with admin auth only; no gamesecretkey is required.
 rewardsRouter.post("/create", requireAnyAdminPermission(["rbac.manage", "rewards.create"]), asyncHandler(createReward));
 
 // PUT /api/rewards/probabilities - atomically updates all active reward probabilities for one game.
