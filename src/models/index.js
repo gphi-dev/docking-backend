@@ -5,10 +5,14 @@ import { Usermobile } from "./usermobile.model.js";
 import { Role } from "./role.model.js";
 import { Permission } from "./permission.model.js";
 import { RolePermission } from "./rolePermission.model.js";
+import { Reward } from "./reward.model.js";
 
 
 Game.hasMany(Subscriber, { foreignKey: "game_id", as: "subscribers" });
 Subscriber.belongsTo(Game, { foreignKey: "game_id", as: "game" });
+
+Game.hasMany(Reward, { foreignKey: "game_id", sourceKey: "game_id", as: "rewards" });
+Reward.belongsTo(Game, { foreignKey: "game_id", targetKey: "game_id", as: "game" });
 
 Usermobile.belongsTo(Game, { foreignKey: "game_id", targetKey: "game_id", as: "game" });
 Game.hasMany(Usermobile, { foreignKey: "game_id", sourceKey: "game_id", as: "usermobiles" });
@@ -35,4 +39,4 @@ Permission.belongsToMany(Role, {
   as: "roles",
 });
 
-export { Admin, Game, Permission, Role, RolePermission, Subscriber, Usermobile };
+export { Admin, Game, Permission, Reward, Role, RolePermission, Subscriber, Usermobile };

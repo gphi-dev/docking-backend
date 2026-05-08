@@ -1,0 +1,35 @@
+import { Router } from "express";
+import {
+  createReward,
+  deleteReward,
+  getRewardById,
+  listRewards,
+  updateReward,
+  updateRewardStatus,
+} from "../controllers/rewards.controller.js";
+import { requireAnyAdminPermission } from "../middleware/requireAdminPermission.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+
+export const rewardsRouter = Router();
+
+// GET /api/rewards - lists rewards with filters, search, and pagination.
+rewardsRouter.get("/", requireAnyAdminPermission(["rbac.manage", "rewards.view"]), asyncHandler(listRewards));
+
+// POST /api/rewards - creates a reward and recalculates game reward probabilities.
+rewardsRouter.post("/", requireAnyAdminPermission(["rbac.manage", "rewards.create"]), asyncHandler(createReward));
+
+// PATCH /api/rewards/:id/status - toggles reward active state and recalculates probabilities.
+rewardsRouter.patch(
+  "/:id/status",
+  requireAnyAdminPermission(["rbac.manage", "rewards.update"]),
+  asyncHandler(updateRewardStatus),
+);
+
+// GET /api/rewards/:id - fetches one reward by ID.
+rewardsRouter.get("/:id", requireAnyAdminPermission(["rbac.manage", "rewards.view"]), asyncHandler(getRewardById));
+
+// PUT /api/rewards/:id - updates reward fields and recalculates probabilities when needed.
+rewardsRouter.put("/:id", requireAnyAdminPermission(["rbac.manage", "rewards.update"]), asyncHandler(updateReward));
+
+// DELETE /api/rewards/:id - deletes a reward and recalculates remaining probabilities.
+rewardsRouter.delete("/:id", requireAnyAdminPermission(["rbac.manage", "rewards.delete"]), asyncHandler(deleteReward));

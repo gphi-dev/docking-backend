@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function applySchemaFromSqlFile() {
-  const schemaFilePath = path.resolve(__dirname, "../../../database/schema.sql");
+  const schemaFilePath = path.resolve(__dirname, "../../database/schema.sql");
   const schemaSql = fs.readFileSync(schemaFilePath, "utf8");
 
   const connection = await mysql.createConnection({

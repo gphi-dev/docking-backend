@@ -8,6 +8,7 @@ import { subscribersRouter } from "./routes/subscribers.routes.js";
 import { adminsRouter } from "./routes/admins.routes.js";
 import { usermobileRouter } from "./routes/usermobile.routes.js";
 import { rbacRouter } from "./routes/rbac.routes.js";
+import { rewardsRouter } from "./routes/rewards.routes.js";
 import { authenticateAdminJwt } from "./middleware/authenticateAdminJwt.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
 
@@ -16,7 +17,7 @@ export function createApp() {
 
   app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
     if (req.method === "OPTIONS") {
@@ -37,7 +38,7 @@ export function createApp() {
     allowedOrigins.length > 0
       ? {
           origin: allowedOrigins,
-          methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+          methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
           allowedHeaders: ["Content-Type", "Authorization"],
           optionsSuccessStatus: 204,
         }
@@ -63,6 +64,9 @@ export function createApp() {
 
   // /api/games/* - admin-protected game management routes.
   app.use("/api/games", authenticateAdminJwt, gamesRouter);
+
+  // /api/rewards/* - admin-protected reward management routes.
+  app.use("/api/rewards", authenticateAdminJwt, rewardsRouter);
 
   // /api/subscribers/* - admin-protected subscriber reporting routes.
   app.use("/api/subscribers", authenticateAdminJwt, subscribersRouter);

@@ -39,6 +39,10 @@ VALUES
   ('Games', 'Create games', 'games.create', '/api/games', 'POST', 'Create new game records.'),
   ('Games', 'Update games', 'games.update', '/api/games/:id', 'PUT', 'Edit game records and visual assets.'),
   ('Games', 'Delete games', 'games.delete', '/api/games/:id', 'DELETE', 'Delete game records.'),
+  ('Rewards', 'View rewards', 'rewards.view', '/api/rewards', 'GET', 'List rewards and open reward details.'),
+  ('Rewards', 'Create rewards', 'rewards.create', '/api/rewards', 'POST', 'Create game reward records.'),
+  ('Rewards', 'Update rewards', 'rewards.update', '/api/rewards/:id', 'PUT/PATCH', 'Edit reward records and active status.'),
+  ('Rewards', 'Delete rewards', 'rewards.delete', '/api/rewards/:id', 'DELETE', 'Delete game reward records.'),
   ('Admin Users', 'View admins', 'admins.view', '/api/admins', 'GET', 'List admin users and roles.'),
   ('Admin Users', 'Create admins', 'admins.create', '/api/admins', 'POST', 'Create new admin users.'),
   ('Admin Users', 'Update admins', 'admins.update', '/api/admins/:id', 'PUT', 'Update admin users and roles.'),
@@ -149,6 +153,9 @@ SELECT roles.id, permissions.id,
       'games.view',
       'games.create',
       'games.update',
+      'rewards.view',
+      'rewards.create',
+      'rewards.update',
       'subscribers.view',
       'subscribers.view_by_game',
       'subscribers.view_game_subscribers'
@@ -177,7 +184,7 @@ ON DUPLICATE KEY UPDATE
 
 CREATE TABLE IF NOT EXISTS games (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  game_id VARCHAR(45) NULL,
+  game_id INT NOT NULL,
   game_url VARCHAR(255) NULL,
   gamesecretkey VARCHAR(45) NULL,
   is_landscape VARCHAR(10) NOT NULL DEFAULT 'False',
@@ -188,11 +195,12 @@ CREATE TABLE IF NOT EXISTS games (
   slug VARCHAR(255) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  UNIQUE KEY uq_games_game_id (game_id),
   UNIQUE KEY uq_games_game_url (game_url)
 ) ENGINE=InnoDB;
 
 ALTER TABLE games
-  ADD COLUMN IF NOT EXISTS game_id VARCHAR(45) NULL,
+  ADD COLUMN IF NOT EXISTS game_id INT NOT NULL,
   ADD COLUMN IF NOT EXISTS game_url VARCHAR(255) NULL,
   ADD COLUMN IF NOT EXISTS gamesecretkey VARCHAR(45) NULL,
   ADD COLUMN IF NOT EXISTS is_landscape VARCHAR(10) NOT NULL DEFAULT 'False',
@@ -218,6 +226,30 @@ SET @games_game_url_index_sql := IF(
 PREPARE games_game_url_index_stmt FROM @games_game_url_index_sql;
 EXECUTE games_game_url_index_stmt;
 DEALLOCATE PREPARE games_game_url_index_stmt;
+
+-- rewards.game_id references games.game_id in the existing MySQL setup.
+CREATE TABLE IF NOT EXISTS rewards (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  game_id INT NOT NULL,
+  picture VARCHAR(255) NULL,
+  description TEXT NULL,
+  prize VARCHAR(255) NOT NULL,
+  holdings INT UNSIGNED NOT NULL DEFAULT 0,
+  probability DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_rewards_game_id (game_id),
+  KEY idx_rewards_game_active (game_id, is_active),
+  CONSTRAINT fk_rewards_game_id
+    FOREIGN KEY (game_id) REFERENCES games (game_id)
+    ON DELETE CASCADE,
+  CONSTRAINT chk_rewards_holdings
+    CHECK (holdings >= 0),
+  CONSTRAINT chk_rewards_probability
+    CHECK (probability >= 0 AND probability <= 100)
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS subscribers (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,

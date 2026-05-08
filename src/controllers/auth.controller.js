@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import { Admin, Permission, Role, RolePermission, Usermobile } from "../models/index.js";
+import { Admin, Game, Permission, Role, RolePermission, Usermobile } from "../models/index.js";
 import { env } from "../config/env.js";
 import { verifyPassword } from "../utils/password.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -134,6 +134,18 @@ function parseNickname(rawValue) {
   return nickname;
 }
 
+function readGameSecretKeyPayload(body) {
+  if (Object.prototype.hasOwnProperty.call(body ?? {}, "gamesecretkey")) {
+    return body.gamesecretkey;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body ?? {}, "game_secret_key")) {
+    return body.game_secret_key;
+  }
+
+  return undefined;
+}
+
 /**
  * @service mockSmsProvider
  * @description Simulates sending an SMS notification. 
@@ -250,6 +262,7 @@ export const getCurrentAdmin = asyncHandler(async (req, res) => {
 export async function createOtpSession(req, res) {
   let phone = req.body?.phone;
   const game_id = req.body?.game_id;
+  const gamesecretkey = readGameSecretKeyPayload(req.body);
   const points = parsePoints(req.body?.points);
   const isVerified = parseIsVerified(req.body?.is_verified);
   const nickname = parseNickname(req.body?.nickname);
@@ -267,6 +280,14 @@ export async function createOtpSession(req, res) {
       success: false, 
       errorCode: "ERR_MISSING_GAME_ID", 
       message: "game_id is required" 
+    });
+  }
+
+  if (gamesecretkey === undefined || gamesecretkey === null || String(gamesecretkey).trim() === "") {
+    return res.status(400).json({
+      success: false,
+      errorCode: "ERR_MISSING_GAME_SECRET_KEY",
+      message: "gamesecretkey is required"
     });
   }
 
@@ -322,7 +343,38 @@ export async function createOtpSession(req, res) {
     });
   }
 
+  if (!phone.startsWith("9")) {
+    return res.status(400).json({
+      success: false,
+      errorCode: "ERR_INVALID_PHONE_PREFIX",
+      message: "Phone must start with 9"
+    });
+  }
+
   try {
+    const game = await Game.findOne({
+      attributes: ["id", "game_id", "gamesecretkey"],
+      where: {
+        game_id: game_id,
+      },
+    });
+
+    if (!game) {
+      return res.status(404).json({
+        success: false,
+        errorCode: "ERR_GAME_NOT_FOUND",
+        message: "Game not found"
+      });
+    }
+
+    if (String(game.gamesecretkey ?? "").trim() !== String(gamesecretkey).trim()) {
+      return res.status(401).json({
+        success: false,
+        errorCode: "ERR_INVALID_GAME_SECRET_KEY",
+        message: "gamesecretkey does not match game_id"
+      });
+    }
+
     // VALIDATION: Check if phone + game_id already exists
     const existingUser = await Usermobile.findOne({
       where: {
