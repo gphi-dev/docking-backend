@@ -4,6 +4,7 @@ import {
   drawRewardRecord,
   getRewardRecordById,
   listRewardRecords,
+  updateRewardProbabilitiesForGame,
   updateRewardRecord,
   updateRewardStatusRecord,
 } from "../services/rewards.service.js";
@@ -11,8 +12,6 @@ import { Game } from "../models/index.js";
 
 const DEFAULT_REWARD_PAGE_SIZE = 10;
 const MAX_REWARD_PAGE_SIZE = 100;
-const DEFAULT_REWARD_DRAW_LIMIT = 4;
-const MAX_REWARD_DRAW_LIMIT = 100;
 const PICTURE_MAX_LENGTH = 255;
 const PRIZE_MAX_LENGTH = 255;
 
@@ -68,9 +67,21 @@ function parsePaginationInteger(rawValue, fieldName, fallbackValue) {
   return parsedValue;
 }
 
-function parseDrawLimit(rawValue) {
-  const parsedLimit = parsePaginationInteger(rawValue, "limit", DEFAULT_REWARD_DRAW_LIMIT);
-  return Math.min(parsedLimit, MAX_REWARD_DRAW_LIMIT);
+function normalizeProbability(rawValue, fieldName = "probability") {
+  if (rawValue === undefined || rawValue === null || String(rawValue).trim() === "") {
+    throw createHttpError(`${fieldName} is required`);
+  }
+
+  if (typeof rawValue === "boolean") {
+    throw createHttpError(`${fieldName} must be a number between 0 and 100`);
+  }
+
+  const probability = Number(rawValue);
+  if (!Number.isFinite(probability) || probability < 0 || probability > 100) {
+    throw createHttpError(`${fieldName} must be a number between 0 and 100`);
+  }
+
+  return Number(probability.toFixed(2));
 }
 
 function normalizeRequiredString(rawValue, fieldName, maxLength) {
@@ -244,8 +255,47 @@ function buildUpdatePayload(body) {
   if (hasOwn(body, "is_active")) {
     payload.is_active = normalizeIsActive(body.is_active, { required: true });
   }
+  if (hasOwn(body, "probability")) {
+    payload.probability = normalizeProbability(body.probability);
+  }
 
   return payload;
+}
+
+function buildBulkProbabilityPayload(body) {
+  const gameId = parsePositiveInteger(body?.game_id, "game_id");
+  const rawRewards = Array.isArray(body?.rewards) ? body.rewards : body?.probabilities;
+
+  if (!Array.isArray(rawRewards) || rawRewards.length === 0) {
+    throw createHttpError("rewards must be a non-empty array");
+  }
+
+  const seenRewardIds = new Set();
+  const rewards = rawRewards.map((reward, index) => {
+    const rewardId = parsePositiveInteger(reward?.id ?? reward?.reward_id, `rewards[${index}].id`);
+    if (seenRewardIds.has(rewardId)) {
+      throw createHttpError("Duplicate reward id in rewards array");
+    }
+    seenRewardIds.add(rewardId);
+
+    return {
+      id: rewardId,
+      probability: normalizeProbability(reward?.probability, `rewards[${index}].probability`),
+    };
+  });
+
+  const totalProbabilityCents = rewards.reduce(
+    (total, reward) => total + Math.round(reward.probability * 100),
+    0,
+  );
+  if (totalProbabilityCents !== 10000) {
+    throw createHttpError("Total probability must equal exactly 100.00");
+  }
+
+  return {
+    gameId,
+    rewards,
+  };
 }
 
 export async function createReward(req, res) {
@@ -294,16 +344,25 @@ export async function listRewards(req, res) {
 
 export async function drawReward(req, res) {
   const gameId = parsePositiveInteger(req.body?.game_id, "game_id");
-  const limit = parseDrawLimit(req.body?.limit);
   await assertGameSecretKeyMatches(gameId, readGameSecretKeyPayload(req.body ?? {}));
-  const rewards = await drawRewardRecord(gameId, limit);
+  const rewards = await drawRewardRecord(gameId);
 
   return res.json({
     success: true,
     message: "Rewards drawn successfully",
     data: rewards,
     count: rewards.length,
-    limit,
+  });
+}
+
+export async function updateRewardProbabilities(req, res) {
+  const { gameId, rewards } = buildBulkProbabilityPayload(req.body ?? {});
+  const updatedRewards = await updateRewardProbabilitiesForGame(gameId, rewards);
+
+  return res.json({
+    success: true,
+    message: "Reward probabilities updated successfully",
+    data: updatedRewards,
   });
 }
 
