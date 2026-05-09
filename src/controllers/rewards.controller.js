@@ -9,6 +9,7 @@ import {
   updateRewardStatusRecord,
 } from "../services/rewards.service.js";
 import { Game } from "../models/index.js";
+import { resolveGameImageUrl } from "../utils/gameImageStorage.js";
 
 const DEFAULT_REWARD_PAGE_SIZE = 10;
 const MAX_REWARD_PAGE_SIZE = 100;
@@ -144,6 +145,11 @@ function normalizeOptionalString(rawValue, fieldName, maxLength) {
   return normalizedValue || null;
 }
 
+async function normalizeOptionalPicture(rawValue) {
+  const resolvedPicture = await resolveGameImageUrl(rawValue, { fieldName: "picture" });
+  return normalizeOptionalString(resolvedPicture, "picture", PICTURE_MAX_LENGTH);
+}
+
 function normalizeOptionalText(rawValue, fieldName) {
   if (rawValue === undefined) {
     return undefined;
@@ -254,7 +260,7 @@ async function assertGameSecretKeyMatches(gameId, rawGameSecretKey) {
   }
 }
 
-function buildCreatePayload(body) {
+async function buildCreatePayload(body) {
   const payloadBody = readRewardPayloadBody(body);
   const gamePayload = readFirstDefined(payloadBody, ["game"]);
   const selectedGamePayload = gamePayload && typeof gamePayload === "object"
@@ -264,13 +270,14 @@ function buildCreatePayload(body) {
   const normalizedPicturePayload = picturePayload && typeof picturePayload === "object"
     ? readFirstDefined(picturePayload, ["url", "src", "path", "image_url", "imageUrl"])
     : picturePayload;
+  const picture = await normalizeOptionalPicture(normalizedPicturePayload);
 
   return {
     game_id: parsePositiveInteger(
       readFirstDefined(payloadBody, ["game_id", "gameId"]) ?? selectedGamePayload,
       "game_id",
     ),
-    picture: normalizeOptionalString(normalizedPicturePayload, "picture", PICTURE_MAX_LENGTH) ?? null,
+    picture: picture ?? null,
     description: normalizeOptionalText(readFirstDefined(payloadBody, ["description", "desc"]), "description") ?? null,
     prize: normalizeRequiredString(
       readFirstDefined(payloadBody, ["prize", "reward_name", "rewardName", "name", "title"]),
@@ -286,14 +293,14 @@ function buildCreatePayload(body) {
   };
 }
 
-function buildUpdatePayload(body) {
+async function buildUpdatePayload(body) {
   const payload = {};
 
   if (hasOwn(body, "game_id")) {
     payload.game_id = parsePositiveInteger(body.game_id, "game_id");
   }
   if (hasOwn(body, "picture")) {
-    payload.picture = normalizeOptionalString(body.picture, "picture", PICTURE_MAX_LENGTH);
+    payload.picture = await normalizeOptionalPicture(body.picture);
   }
   if (hasOwn(body, "description")) {
     payload.description = normalizeOptionalText(body.description, "description");
@@ -368,7 +375,7 @@ export function isCreateRewardRequestBody(body) {
 }
 
 export async function createReward(req, res) {
-  const reward = await createRewardRecord(buildCreatePayload(req.body ?? {}));
+  const reward = await createRewardRecord(await buildCreatePayload(req.body ?? {}));
 
   return res.status(201).json({
     success: true,
@@ -462,7 +469,7 @@ export async function getRewardById(req, res) {
 
 export async function updateReward(req, res) {
   const rewardId = parsePositiveInteger(req.params.id, "reward id");
-  const reward = await updateRewardRecord(rewardId, buildUpdatePayload(req.body ?? {}));
+  const reward = await updateRewardRecord(rewardId, await buildUpdatePayload(req.body ?? {}));
 
   return res.json({
     success: true,
