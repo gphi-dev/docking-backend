@@ -8,7 +8,6 @@ import {
   updateRewardRecord,
   updateRewardStatusRecord,
 } from "../services/rewards.service.js";
-import { Game } from "../models/index.js";
 import { resolveGameImageUrl } from "../utils/gameImageStorage.js";
 
 const DEFAULT_REWARD_PAGE_SIZE = 10;
@@ -237,29 +236,6 @@ function readGameSecretKeyPayload(body) {
   return undefined;
 }
 
-async function assertGameSecretKeyMatches(gameId, rawGameSecretKey) {
-  if (gameId === undefined) {
-    return;
-  }
-
-  if (rawGameSecretKey === undefined || rawGameSecretKey === null || String(rawGameSecretKey).trim() === "") {
-    throw createHttpError("gamesecretkey is required when game_id is provided");
-  }
-
-  const game = await Game.findOne({
-    attributes: ["game_id", "gamesecretkey"],
-    where: { game_id: gameId },
-  });
-
-  if (!game) {
-    throw createHttpError("Game not found", 404);
-  }
-
-  if (String(game.gamesecretkey ?? "").trim() !== String(rawGameSecretKey).trim()) {
-    throw createHttpError("gamesecretkey does not match game_id", 401);
-  }
-}
-
 async function buildCreatePayload(body) {
   const payloadBody = readRewardPayloadBody(body);
   const gamePayload = readFirstDefined(payloadBody, ["game"]);
@@ -425,17 +401,83 @@ export async function listRewards(req, res) {
   });
 }
 
-export async function drawReward(req, res) {
-  const gameId = parsePositiveInteger(req.body?.game_id, "game_id");
-  await assertGameSecretKeyMatches(gameId, readGameSecretKeyPayload(req.body ?? {}));
-  const rewards = await drawRewardRecord(gameId);
+function isMissingRequiredDrawField(rawValue) {
+  return rawValue === undefined || rawValue === null || String(rawValue).trim() === "";
+}
 
-  return res.json({
-    success: true,
-    message: "Rewards drawn successfully",
-    data: rewards,
-    count: rewards.length,
-  });
+function parseDrawGameId(rawValue) {
+  if (typeof rawValue === "boolean") {
+    return null;
+  }
+
+  const gameId = Number(rawValue);
+  return Number.isInteger(gameId) && gameId > 0 ? gameId : null;
+}
+
+function getErrorStatus(error, fallbackStatus = 400) {
+  if (error && typeof error === "object" && "status" in error) {
+    return Number(error.status) || fallbackStatus;
+  }
+
+  return fallbackStatus;
+}
+
+export async function drawReward(req, res) {
+  const body = req.body ?? {};
+  const rawGameId = body.game_id;
+  const rawGameSecretKey = readGameSecretKeyPayload(body);
+
+  if (isMissingRequiredDrawField(rawGameId) || isMissingRequiredDrawField(rawGameSecretKey)) {
+    return res.status(400).json({
+      success: false,
+      message: "game_id and gamesecretkey are required",
+    });
+  }
+
+  const gameId = parseDrawGameId(rawGameId);
+  if (!gameId) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid game credentials",
+    });
+  }
+
+  try {
+    const drawResult = await drawRewardRecord(gameId, rawGameSecretKey);
+
+    return res.json({
+      success: true,
+      message: "Rewards drawn successfully",
+      data: drawResult.rewards,
+      draw_count: drawResult.drawCount,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    if (
+      [
+        "Invalid game credentials",
+        "No active rewards available for this game",
+        "Total reward probability must be greater than 0",
+      ].includes(errorMessage)
+    ) {
+      return res.status(getErrorStatus(error)).json({
+        success: false,
+        message: errorMessage,
+      });
+    }
+
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to draw rewards",
+      error: errorMessage,
+    });
+  }
+}
+
+export async function drawRandomReward(req, res) {
+  return drawReward(req, res);
 }
 
 export async function updateRewardProbabilities(req, res) {

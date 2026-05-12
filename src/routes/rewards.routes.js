@@ -3,6 +3,7 @@ import {
   createOrListRewards,
   createReward,
   deleteReward,
+  drawRandomReward,
   drawReward,
   getRewardById,
   isCreateRewardRequestBody,
@@ -28,8 +29,11 @@ function requireRewardsRootPermission(req, res, next) {
   return requireAnyAdminPermission(permissionKeys)(req, res, next);
 }
 
-// POST /api/rewards/draw - draws all active rewards with holdings and probability for a validated game.
+// POST /api/rewards/draw - draws weighted random rewards for a validated game.
 rewardsPublicRouter.post("/draw", asyncHandler(drawReward));
+
+// POST /api/rewards/drawRandom - draws weighted random rewards for a validated game.
+rewardsPublicRouter.post("/drawRandom", asyncHandler(drawRandomReward));
 
 // POST /api/rewards - lists rewards, or creates a reward for older clients that post a prize here.
 rewardsRouter.post("/", requireRewardsRootPermission, asyncHandler(createOrListRewards));
