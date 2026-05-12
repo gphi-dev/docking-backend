@@ -1,6 +1,7 @@
 import {
   createRewardRecord,
   deleteRewardRecord,
+  drawRandomRewardRecords,
   drawRewardRecord,
   getRewardRecordById,
   listRewardRecords,
@@ -436,6 +437,73 @@ export async function drawReward(req, res) {
     data: rewards,
     count: rewards.length,
   });
+}
+
+function isMissingRequiredDrawRandomField(rawValue) {
+  return rawValue === undefined || rawValue === null || String(rawValue).trim() === "";
+}
+
+function parseDrawRandomGameId(rawValue) {
+  if (typeof rawValue === "boolean") {
+    return null;
+  }
+
+  const gameId = Number(rawValue);
+  return Number.isInteger(gameId) && gameId > 0 ? gameId : null;
+}
+
+export async function drawRandomReward(req, res) {
+  const body = req.body ?? {};
+  const rawGameId = body.game_id;
+  const rawGameSecretKey = readGameSecretKeyPayload(body);
+
+  if (isMissingRequiredDrawRandomField(rawGameId) || isMissingRequiredDrawRandomField(rawGameSecretKey)) {
+    return res.status(400).json({
+      success: false,
+      message: "game_id and gamesecretkey are required",
+    });
+  }
+
+  const gameId = parseDrawRandomGameId(rawGameId);
+  if (!gameId) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid game credentials",
+    });
+  }
+
+  try {
+    const drawResult = await drawRandomRewardRecords(gameId, rawGameSecretKey);
+
+    return res.json({
+      success: true,
+      message: "Rewards drawn successfully",
+      data: drawResult.rewards,
+      draw_count: drawResult.drawCount,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    if (
+      [
+        "Invalid game credentials",
+        "No active rewards available for this game",
+        "Total reward probability must be greater than 0",
+      ].includes(errorMessage)
+    ) {
+      return res.status(error.status ?? 400).json({
+        success: false,
+        message: errorMessage,
+      });
+    }
+
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to draw rewards",
+      error: errorMessage,
+    });
+  }
 }
 
 export async function updateRewardProbabilities(req, res) {
