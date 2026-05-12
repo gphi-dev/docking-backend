@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op, QueryTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 import { Game, Reward } from "../models/index.js";
 
@@ -299,6 +299,176 @@ export async function drawRewardRecord(gameId) {
     });
 
     return updatedRewards.map((reward) => serializeReward(reward));
+  });
+}
+
+function serializeDrawnReward(rewardRecord) {
+  const reward = serializeReward(rewardRecord);
+
+  return {
+    id: reward.id,
+    game_id: reward.game_id,
+    picture: reward.picture,
+    description: reward.description,
+    prize: reward.prize,
+    remaining_holdings: reward.holdings,
+    probability: reward.probability,
+    is_active: reward.is_active,
+    created_at: reward.created_at,
+    updated_at: reward.updated_at,
+  };
+}
+
+function getAffectedRows(queryResult, queryMetadata) {
+  return Number(
+    queryMetadata?.affectedRows
+      ?? queryResult?.affectedRows
+      ?? queryMetadata
+      ?? 0,
+  );
+}
+
+export async function drawRandomRewardRecords(gameId, gameSecretKey) {
+  return sequelize.transaction(async (transaction) => {
+    const [game] = await sequelize.query(
+      `
+        SELECT game_id, gamesecretkey
+        FROM games
+        WHERE game_id = ?
+        LIMIT 1
+        FOR UPDATE
+      `,
+      {
+        replacements: [gameId],
+        type: QueryTypes.SELECT,
+        transaction,
+      },
+    );
+
+    if (!game || String(game.gamesecretkey ?? "").trim() !== String(gameSecretKey).trim()) {
+      throw createHttpError("Invalid game credentials", 401);
+    }
+
+    const rewards = await sequelize.query(
+      `
+        SELECT *
+        FROM rewards
+        WHERE game_id = ?
+        AND is_active = 1
+        AND holdings > 0
+        ORDER BY id ASC
+        FOR UPDATE
+      `,
+      {
+        replacements: [gameId],
+        type: QueryTypes.SELECT,
+        transaction,
+      },
+    );
+
+    if (rewards.length === 0) {
+      throw createHttpError("No active rewards available for this game", 409);
+    }
+
+    const drawCount = rewards.length;
+    const drawnMap = new Map();
+
+    for (let drawIndex = 0; drawIndex < drawCount; drawIndex += 1) {
+      const availableRewards = rewards.filter((reward) => Number(reward.holdings ?? 0) > 0);
+      const totalProbability = availableRewards.reduce(
+        (sum, reward) => sum + Number(reward.probability ?? 0),
+        0,
+      );
+
+      if (totalProbability <= 0) {
+        throw createHttpError("Total reward probability must be greater than 0", 409);
+      }
+
+      // Weighted random selection: each reward owns a slice of the probability
+      // range, so larger probability values occupy more of the random interval.
+      const random = Math.random() * totalProbability;
+      let cumulative = 0;
+      let selectedReward = null;
+      let lastRewardWithProbability = null;
+
+      for (const reward of availableRewards) {
+        const rewardProbability = Number(reward.probability ?? 0);
+        if (rewardProbability <= 0) {
+          continue;
+        }
+
+        lastRewardWithProbability = reward;
+        cumulative += rewardProbability;
+        if (random <= cumulative) {
+          selectedReward = reward;
+          break;
+        }
+      }
+
+      if (!selectedReward) {
+        selectedReward = lastRewardWithProbability;
+      }
+
+      if (!selectedReward) {
+        throw createHttpError("Total reward probability must be greater than 0", 409);
+      }
+
+      selectedReward.holdings = Number(selectedReward.holdings ?? 0) - 1;
+      drawnMap.set(String(selectedReward.id), (drawnMap.get(String(selectedReward.id)) ?? 0) + 1);
+    }
+
+    for (const [rewardId, drawnQuantity] of drawnMap.entries()) {
+      const [queryResult, queryMetadata] = await sequelize.query(
+        `
+          UPDATE rewards
+          SET
+            holdings = holdings - ?,
+            is_active = CASE
+              WHEN holdings - ? <= 0 THEN 0
+              ELSE is_active
+            END,
+            updated_at = NOW()
+          WHERE id = ?
+          AND game_id = ?
+          AND holdings >= ?
+        `,
+        {
+          replacements: [drawnQuantity, drawnQuantity, rewardId, gameId, drawnQuantity],
+          transaction,
+        },
+      );
+
+      if (getAffectedRows(queryResult, queryMetadata) !== 1) {
+        throw createHttpError("Failed to update reward holdings", 409);
+      }
+    }
+
+    const selectedRewardIds = [...drawnMap.keys()];
+    const updatedRewards = await sequelize.query(
+      `
+        SELECT *
+        FROM rewards
+        WHERE id IN (:selectedRewardIds)
+        AND game_id = :gameId
+        ORDER BY id ASC
+      `,
+      {
+        replacements: {
+          selectedRewardIds,
+          gameId,
+        },
+        type: QueryTypes.SELECT,
+        transaction,
+      },
+    );
+
+    return {
+      rewards: updatedRewards.flatMap((reward) => {
+        const drawnQuantity = drawnMap.get(String(reward.id)) ?? 0;
+        return Array.from({ length: drawnQuantity }, () => serializeDrawnReward(reward));
+      }),
+      drawCount,
+    };
   });
 }
 
